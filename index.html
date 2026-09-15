@@ -253,30 +253,33 @@ function useAuth(){
 
 function LoginGate(){
   const [email,setEmail]=useState("");
-  const [sent,setSent]=useState(false);
+  const [password,setPassword]=useState("");
   const [busy,setBusy]=useState(false);
   const [err,setErr]=useState("");
   const submit=async e=>{
     e.preventDefault();
     const v=email.trim();
-    if(!v)return;
+    if(!v||!password)return;
     setBusy(true);setErr("");
-    const {error}=await supabase.auth.signInWithOtp({email:v,options:{emailRedirectTo:window.location.href}});
+    const {error}=await supabase.auth.signInWithPassword({email:v,password});
     setBusy(false);
-    if(error)setErr(error.message);else setSent(true);
+    if(error)setErr(error.message);
   };
   return html`<div className="gate">
     <div className="gate-card">
       <h1>Collabs</h1>
-      <p>Sign in with your work email to see and edit the shared board. We'll send a one-time link — no password to remember.</p>
-      ${sent?html`<p className="gate-msg">Check <strong>${email}</strong> for the sign-in link, then come back to this tab.</p>`:html`
+      <p>Sign in with your team account to see and edit the shared board. New teammate? Ask whoever set this up to add your account in Supabase.</p>
       <form onSubmit=${submit}>
         <label style=${{display:"block",marginBottom:14}}>
-          <span className="kicker" style=${{display:"block",marginBottom:5}}>Work email</span>
+          <span className="kicker" style=${{display:"block",marginBottom:5}}>Email</span>
           <input id="login-email" className="field" type="email" autoFocus required value=${email} onChange=${val(setEmail)} placeholder="you@byggeligt.com"/>
         </label>
-        <button type="submit" className="btn-dark" style=${{width:"100%"}} disabled=${busy}>${busy?"Sending…":"Send sign-in link"}</button>
-      </form>`}
+        <label style=${{display:"block",marginBottom:14}}>
+          <span className="kicker" style=${{display:"block",marginBottom:5}}>Password</span>
+          <input id="login-password" className="field" type="password" required value=${password} onChange=${val(setPassword)} placeholder="••••••••"/>
+        </label>
+        <button type="submit" className="btn-dark" style=${{width:"100%"}} disabled=${busy}>${busy?"Signing in…":"Sign in"}</button>
+      </form>
       ${err&&html`<p className="gate-err">${err}</p>`}
     </div>
   </div>`;
