@@ -449,11 +449,13 @@ function App(){
   const collabDate=c=>{const d=deliverables.filter(x=>x.collabId===c.id&&x.publishDate).map(x=>x.publishDate).sort();return d[0]||c.endDate||c.startDate||TODAY};
   const t=parse(TODAY);
   const prev=new Date(t.getFullYear(),t.getMonth()-1,1);
+  const next=new Date(t.getFullYear(),t.getMonth()+1,1);
   const inPeriod=iso=>{
     if(period==="All time")return true;
     const d=parse(iso)||t;
     if(period==="This year")return d.getFullYear()===t.getFullYear();
     if(period==="This month")return d.getFullYear()===t.getFullYear()&&d.getMonth()===t.getMonth();
+    if(period==="Next month")return d.getFullYear()===next.getFullYear()&&d.getMonth()===next.getMonth();
     return d.getFullYear()===prev.getFullYear()&&d.getMonth()===prev.getMonth();
   };
   const monthRevenue=(y,m,statuses)=>collabs.filter(c=>{const d=parse(collabDate(c));return d&&d.getFullYear()===y&&d.getMonth()===m&&statuses.includes(c.finStatus)}).reduce((a,c)=>a+dkk(c),0);
@@ -508,7 +510,7 @@ function App(){
     </header>
 
     ${tab==="dash"&&html`<${Dashboard} ...${common} period=${period} setPeriod=${setPeriod} showFinance=${showFinance} showToday=${showToday}
-        goal=${goal} inPeriod=${inPeriod} monthRevenue=${monthRevenue} t=${t} prev=${prev}/>`}
+        goal=${goal} inPeriod=${inPeriod} monthRevenue=${monthRevenue} t=${t} prev=${prev} next=${next}/>`}
     ${tab==="cal"&&html`<${Calendar} ...${common} calMode=${calMode} setCalMode=${setCalMode} cursor=${cursor} setCursor=${setCursor}
         sidebar=${sidebar} setSidebar=${setSidebar} openQuick=${iso=>{setQuick(iso);setQuickTitle("")}}/>`}
     ${tab==="contacts"&&html`<${Contacts} ...${common} cFilter=${cFilter} setCFilter=${setCFilter} cSort=${cSort} setCSort=${setCSort}/>`}
@@ -562,7 +564,7 @@ function App(){
 
 /* ---------- Dashboard ---------- */
 function Dashboard(p){
-  const {st,api,dkk,collabDate,period,setPeriod,showFinance,showToday,goal,inPeriod,monthRevenue,t,prev,setOpen,askDelete}=p;
+  const {st,api,dkk,collabDate,period,setPeriod,showFinance,showToday,goal,inPeriod,monthRevenue,t,prev,next,setOpen,askDelete}=p;
   const {collabs,deliverables,tasks}=st;
   const scoped=collabs.filter(c=>inPeriod(collabDate(c)));
   const won=scoped.filter(c=>c.finStatus!=="Potential");
@@ -574,7 +576,7 @@ function Dashboard(p){
   const lastMonth=monthRevenue(prev.getFullYear(),prev.getMonth(),["Paid","Invoiced"]);
   const mom=lastMonth>0?Math.round((thisMonth-lastMonth)/lastMonth*100):null;
   const avg=won.length?Math.round(secured/won.length):0;
-  const titleMap={"This month":MONTHS[t.getMonth()]+" performance","Last month":MONTHS[prev.getMonth()]+" performance","This year":t.getFullYear()+" performance","All time":"All-time performance"};
+  const titleMap={"This month":MONTHS[t.getMonth()]+" performance","Last month":MONTHS[prev.getMonth()]+" performance","Next month":MONTHS[next.getMonth()]+" performance","This year":t.getFullYear()+" performance","All time":"All-time performance"};
 
   const kpis=[
     {label:"Revenue this month",value:kr(thisMonth),delta:mom===null?"No comparison":(mom>=0?"+":"")+mom+"% vs "+MONTHS[prev.getMonth()],dc:mom!==null&&mom<0?"var(--muted)":"var(--ink)",
@@ -607,7 +609,7 @@ function Dashboard(p){
       <h1>${titleMap[period]}</h1>
       <span style=${{fontSize:13,color:"var(--muted)"}}>${scoped.length} collaborations in view</span>
       <div className="pills" style=${{marginLeft:"auto"}}>
-        ${["This month","Last month","This year","All time"].map(x=>html`<button key=${x} type="button" className=${"pill"+(period===x?" on":"")} onClick=${()=>setPeriod(x)}>${x}</button>`)}
+        ${["Last month","This month","Next month","This year","All time"].map(x=>html`<button key=${x} type="button" className=${"pill"+(period===x?" on":"")} onClick=${()=>setPeriod(x)}>${x}</button>`)}
       </div>
     </div>
 
@@ -699,7 +701,7 @@ function Dashboard(p){
 
     <section className="kanban">
       ${KAN.map(col=>{
-        const list=collabs.filter(c=>c.kanban===col);
+        const list=scoped.filter(c=>c.kanban===col);
         return html`<div key=${col} className=${"col"+(p.dropTarget==="col:"+col?" hot":"")} onDragOver=${p.allowDrop("col:"+col)} onDragLeave=${p.leaveDrop("col:"+col)}
           onDrop=${e=>{e.preventDefault();const d=p.drag.current;p.setDropTarget(null);if(d&&d.kind==="collab")api.patch("collabs",d.id,{kanban:col},0);p.drag.current=null}}>
           <div style=${{display:"flex",alignItems:"baseline",gap:9,padding:"0 2px 12px"}}>
@@ -779,8 +781,8 @@ function Calendar(p){
     const day=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i);
     const iso=isoOf(day);
     const items=[];
-    deliverables.filter(d=>d.publishDate===iso).forEach(d=>items.push({key:d.id,kind:"deliverable",icon:"🤝",title:brandOf(d.collabId)+" — "+d.name,onClick:e=>{e.stopPropagation();openCollab(d.collabId)}}));
-    ideas.filter(x=>x.scheduledDate===iso).forEach(x=>items.push({key:x.id,kind:"idea",icon:"💡",title:x.title,onClick:e=>e.stopPropagation()}));
+    deliverables.filter(d=>d.publishDate===iso).forEach(d=>items.push({key:d.id,kind:"deliverable",icon:html`<svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true"><rect x="0.5" y="0.5" width="7" height="7" rx="1.5" fill="var(--ink)"/></svg>`,title:brandOf(d.collabId)+" — "+d.name,onClick:e=>{e.stopPropagation();openCollab(d.collabId)}}));
+    ideas.filter(x=>x.scheduledDate===iso).forEach(x=>items.push({key:x.id,kind:"idea",icon:html`<svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true"><circle cx="4" cy="4" r="3" fill="none" stroke="var(--ink)" stroke-width="1.3"/></svg>`,title:x.title,onClick:e=>e.stopPropagation()}));
     cells.push({iso,num:day.getDate(),dim:calMode==="Month"&&day.getMonth()!==cur.getMonth(),today:iso===TODAY,items});
   }
   if(calMode==="Month"){while(cells.length>35&&cells.slice(-7).every(c=>c.dim))cells.splice(-7)}
@@ -788,7 +790,7 @@ function Calendar(p){
   const monthStart=isoOf(new Date(cur.getFullYear(),cur.getMonth(),1));
   const rows=[];
   deliverables.filter(d=>d.publishDate&&d.publishDate>=monthStart).forEach(d=>rows.push({key:d.id,sort:d.publishDate,title:brandOf(d.collabId)+" — "+d.name,meta:d.platform+" · "+d.type,status:d.status,onClick:()=>openCollab(d.collabId)}));
-  ideas.filter(x=>x.scheduledDate&&x.scheduledDate>=monthStart).forEach(x=>rows.push({key:x.id,sort:x.scheduledDate,title:"💡 "+x.title,meta:x.platform+" · "+x.type,status:"Idea",onClick:()=>{}}));
+  ideas.filter(x=>x.scheduledDate&&x.scheduledDate>=monthStart).forEach(x=>rows.push({key:x.id,sort:x.scheduledDate,title:x.title,meta:x.platform+" · "+x.type,status:"Idea",onClick:()=>{}}));
   rows.sort((a,b)=>a.sort.localeCompare(b.sort));
 
   const unsD=deliverables.filter(d=>!d.publishDate);
@@ -820,7 +822,7 @@ function Calendar(p){
             <div style=${{display:"flex",flexDirection:"column",gap:5}}>
               ${c.items.map(it=>html`<div key=${it.key} className=${"chip"+(it.kind==="idea"?" idea":"")} draggable="true" title=${it.title}
                   onDragStart=${p.startDrag(it.kind,it.key)} onDragEnd=${p.endDrag} onClick=${it.onClick}>
-                <span style=${{flex:"none",fontSize:12,lineHeight:1}}>${it.icon}</span><span className="chip-t">${it.title}</span></div>`)}
+                <span style=${{flex:"none",display:"flex",alignItems:"center"}}>${it.icon}</span><span className="chip-t">${it.title}</span></div>`)}
             </div>
           </div>`)}
         </div>
