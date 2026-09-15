@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Collabs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#f5f5f5; --surface:#fff; --line:#e6e6e6; --line-2:#ededed; --line-3:#e0e0e0;
+  --dash:#d4d4d4; --dash-2:#c4c4c4; --ink:#000; --ink-2:#6b6b6b; --muted:#9a9a9a; --faint:#b0b0b0;
+  --fill:#f2f2f2; --hot:#ececec; --cell:#fafafa; --knob-on:#333; --scrim:rgba(0,0,0,.26);
+  color-scheme: light;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;background:var(--bg)}
+body{color:var(--ink);font-family:"Inter","Helvetica Neue",Helvetica,Arial,sans-serif;font-size:13.5px;line-height:1.5;letter-spacing:-.006em;-webkit-font-smoothing:antialiased}
+input,select,textarea,button{font:inherit;font-size:inherit;color:inherit;letter-spacing:inherit}
+a{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+a:hover{color:var(--ink-2)}
+::selection{background:var(--line)}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+button{cursor:pointer}
+.num{font-variant-numeric:tabular-nums}
+.kicker{font-size:11px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px}
+.x{flex:none;width:22px;height:22px;border:0;border-radius:6px;background:transparent;color:var(--dash-2);font-size:12px;line-height:1;padding:0}
+.x:hover{background:var(--bg);color:var(--ink)}
+.quiet{background:transparent;border:0;border-radius:6px;padding:1px 4px;margin-left:-4px}
+.quiet:hover{background:var(--bg)}
+.qsel{border:0;background:transparent;padding:0;font-size:12.5px;max-width:100%;cursor:pointer}
+.btn{border:1px solid var(--line);border-radius:9px;background:var(--surface);padding:8px 16px;font-size:13px}
+.btn:hover{border-color:var(--ink)}
+.btn-dark{border:0;border-radius:9px;background:var(--ink);color:var(--surface);padding:8px 18px;font-size:13px;font-weight:500;white-space:nowrap}
+.btn-dark:hover{background:var(--knob-on)}
+.btn-dark:disabled{opacity:.5;cursor:default}
+.pills{display:inline-flex;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px;max-width:100%;overflow-x:auto}
+.pill{border:0;border-radius:999px;white-space:nowrap;padding:8px 17px;font-size:13px;font-weight:500;background:transparent;color:var(--muted)}
+.pill.on{background:var(--ink);color:var(--surface)}
+.field{width:100%;background:var(--bg);border:1px solid transparent;border-radius:9px;padding:8px 10px;font-size:13px}
+.field:focus{border-color:var(--ink);outline:none}
+
+/* header */
+.hdr{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);padding:16px 28px 0}
+.hdr-row{display:flex;align-items:center;gap:26px;padding-bottom:14px;border-bottom:1px solid var(--line-3);flex-wrap:wrap;row-gap:10px}
+.brand{font-size:20px;font-weight:700;letter-spacing:-.035em}
+.tabs{display:flex;gap:22px}
+.tab{border:0;background:transparent;padding:3px 0;font-size:15px;font-weight:500;letter-spacing:-.015em;border-bottom:2px solid transparent;color:var(--muted)}
+.tab.on{border-bottom-color:var(--ink);color:var(--ink)}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:16px}
+.toggle{display:flex;align-items:center;gap:7px;white-space:nowrap;border:1px solid var(--line-3);border-radius:999px;background:var(--surface);color:var(--ink-2);padding:5px 12px 5px 5px;font-size:12px}
+.toggle.on{border-color:var(--ink);background:var(--ink);color:var(--surface)}
+.knob{display:flex;width:26px;height:15px;border-radius:999px;padding:2px;background:var(--line);justify-content:flex-start}
+.toggle.on .knob{background:var(--knob-on);justify-content:flex-end}
+.knob span{width:11px;height:11px;border-radius:50%;background:#fff}
+.acct{display:flex;align-items:center;gap:8px;border:1px solid var(--line-3);border-radius:999px;background:var(--surface);padding:4px 12px 4px 4px}
+.acct:hover{border-color:var(--ink)}
+.avatar{width:24px;height:24px;border-radius:50%;background:var(--ink);color:var(--surface);display:grid;place-items:center;font-size:11px;font-weight:600}
+.sync{font-size:11.5px;color:var(--faint);white-space:nowrap}
+
+/* dashboard */
+.page{padding:26px 28px 60px;max-width:1640px}
+.title-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+h1{font-size:22px;font-weight:700;letter-spacing:-.03em;line-height:1.1;margin:0;text-wrap:balance}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(214px,1fr));gap:12px;margin-bottom:12px}
+.kpi{padding:18px 20px}
+.kpi-val{font-size:28px;font-weight:700;letter-spacing:-.035em;line-height:1.02;margin-top:14px}
+.kpi-delta{font-size:12.5px;font-weight:500;margin-top:3px}
+.kpi-sub{font-size:12px;color:var(--ink-2);margin-top:10px}
+.chart-row{display:grid;grid-template-columns:minmax(0,1fr) 244px;gap:12px;margin-bottom:24px}
+.chart-card{padding:18px 22px 10px;min-width:0}
+.goal-card{padding:18px 20px;display:flex;flex-direction:column;align-items:center}
+.goal-input{width:78px;text-align:right;border:1px solid transparent;border-radius:6px;background:transparent;padding:0 3px;font-size:12.5px;color:var(--ink-2)}
+.goal-input:hover{background:var(--bg)}
+.goal-input:focus{border-color:var(--ink);outline:none}
+
+.todo{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:24px 28px 28px;margin-bottom:26px}
+.todo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:40px;row-gap:28px}
+.task{display:flex;align-items:flex-start;gap:14px;padding:13px 0;border-bottom:1px solid var(--line-2)}
+.check{flex:none;width:24px;height:24px;margin-top:1px;border-radius:50%;border:1.5px solid var(--ink);background:transparent;padding:0}
+.check.done{background:var(--ink)}
+.add-row{display:flex;align-items:center;gap:10px;width:100%;margin-top:12px;padding:4px 0;background:transparent;border:0;font-size:13px;color:var(--muted)}
+.add-row:hover{color:var(--ink)}
+.add-dot{width:22px;height:22px;border:1px dashed var(--dash-2);border-radius:50%;display:grid;place-items:center;font-size:12px;line-height:1}
+
+.kanban{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:start}
+.col{border-radius:16px;padding:8px 6px 16px;min-height:180px}
+.col.hot{background:var(--hot)}
+.kcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:15px 16px;cursor:pointer}
+.kcard:hover{border-color:var(--ink)}
+.clamp{margin:8px 0 0;font-size:12.5px;color:var(--ink-2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.empty-drop{border:1px dashed var(--dash);border-radius:14px;padding:22px;text-align:center;font-size:12px;color:var(--faint)}
+.add-collab{border:1px dashed var(--dash);border-radius:14px;padding:11px;background:transparent;font-size:12.5px;color:var(--muted)}
+.add-collab:hover{border-color:var(--ink);color:var(--ink)}
+
+/* calendar */
+.cal-wrap{display:flex;align-items:stretch;gap:12px;padding:24px 28px 44px}
+.cal-main{flex:1;min-width:0}
+.nav-btn{width:30px;height:30px;border:1px solid var(--line);border-radius:9px;background:var(--surface);font-size:13px;padding:0}
+.nav-btn:hover{border-color:var(--ink)}
+.grid-scroll{overflow-x:auto}
+.grid7{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;min-width:620px}
+.cell{border-radius:10px;padding:8px;cursor:pointer;background:var(--cell)}
+.cell.hot{background:var(--hot)}
+.chip{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:5px 7px;cursor:grab;min-width:0}
+.chip.idea{border:1px dashed var(--dash-2)}
+.chip:hover{border-color:var(--ink)}
+.chip-t{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list-row{display:grid;grid-template-columns:128px minmax(0,2fr) minmax(0,1fr) 106px;gap:16px;align-items:center;padding:13px 8px;border-bottom:1px solid var(--line-2);border-radius:9px;cursor:pointer}
+.list-row:hover{background:var(--bg)}
+.side{flex:none;background:var(--surface);border:1px solid var(--line);border-radius:16px}
+.side.hot{background:var(--hot)}
+.uns{background:var(--bg);border:1px solid transparent;border-radius:10px;padding:9px 11px;cursor:grab}
+.uns:hover{border-color:var(--ink)}
+.uns-idea{border:1px dashed var(--dash);border-radius:10px;padding:8px 9px;cursor:grab}
+.uns-idea:hover{border-style:solid;border-color:var(--ink)}
+.quiet-w:hover{background:var(--surface)}
+
+/* contacts */
+.ctable{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:4px 20px 14px;overflow-x:auto}
+.crow{display:grid;grid-template-columns:minmax(124px,1fr) minmax(110px,.8fr) minmax(150px,.9fr) 118px 78px 118px 118px 24px;gap:10px;padding:11px 8px;border-bottom:1px solid var(--line-2);border-radius:9px;align-items:center;min-width:900px}
+.crow.head{padding:14px 8px 10px;border-bottom-color:var(--line);border-radius:0}
+.crow:not(.head):hover{background:var(--cell)}
+.cin{width:100%;min-width:0;background:transparent;border:1px solid transparent;border-radius:7px;padding:3px 5px;margin-left:-5px;text-overflow:ellipsis}
+.cin:hover{background:var(--surface);border-color:var(--line)}
+.cin:focus{border-color:var(--ink);outline:none;background:var(--surface)}
+.date-in{width:100%;background:transparent;border:1px solid transparent;border-radius:8px;padding:4px 6px;font-size:12px;color:var(--ink-2)}
+.date-in:hover{border-color:var(--line);background:var(--surface)}
+.date-in:focus{border-color:var(--ink);outline:none}
+.due{background:var(--ink);border-radius:8px}
+.due .date-in{color:var(--surface);font-weight:500;color-scheme:dark}
+.due .date-in:hover{background:transparent;border-color:var(--ink-2)}
+.sel-box{border:1px solid var(--line);border-radius:9px;background:var(--surface);padding:6px 10px;font-size:12.5px}
+
+/* overlays */
+.scrim{position:fixed;inset:0;z-index:40;background:var(--scrim)}
+.panel-wrap{display:flex;justify-content:flex-end;padding:12px}
+.panel{width:min(640px,100%);height:100%;overflow-y:auto;background:var(--surface);border:1px solid var(--line);border-radius:18px}
+.panel-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;padding:20px 26px 14px;background:var(--surface);border-bottom:1px solid var(--line-2)}
+.panel-body{padding:18px 26px 56px}
+.psel{border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:6px 11px;font-size:12.5px;max-width:100%}
+.stat{background:var(--bg);border-radius:12px;padding:13px 15px}
+.fgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 20px}
+.del{background:var(--bg);border-radius:12px;padding:12px 14px}
+.del-date{width:100%;background:var(--surface);border:1px solid transparent;border-radius:8px;padding:5px 8px;font-size:11.5px}
+.del-date:focus{border-color:var(--ink);outline:none}
+.center{display:grid;place-items:center;padding:20px;z-index:60}
+.dialog{width:min(380px,100%);background:var(--surface);border-radius:16px;padding:24px 26px 20px}
+.dialog h4{font-size:17px;font-weight:600;margin:0 0 4px;letter-spacing:-.022em}
+
+/* auth gate */
+.gate{min-height:100dvh;display:grid;place-items:center;padding:20px}
+.gate-card{width:min(380px,100%);background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:32px 28px}
+.gate-card h1{font-size:22px;margin-bottom:6px}
+.gate-card p{font-size:13px;color:var(--ink-2);margin:0 0 20px;line-height:1.5}
+.gate-msg{font-size:12.5px;color:var(--ink-2);margin-top:14px;line-height:1.5}
+.gate-err{font-size:12.5px;color:#b3261e;margin-top:14px;line-height:1.5}
+
+@media (max-width: 980px){
+  .chart-row{grid-template-columns:minmax(0,1fr)}
+  .cal-wrap{flex-direction:column}
+  .side{width:100% !important}
+}
+@media (max-width: 760px){
+  .hdr{padding:12px 16px 0}
+  .hdr-row{gap:14px}
+  .hdr-right{margin-left:0;width:100%;justify-content:flex-end;flex-wrap:wrap;gap:8px 10px}
+  .today-lbl,.sync{display:none}
+  .page,.cal-wrap{padding:20px 16px 48px}
+  .kanban{grid-template-columns:minmax(0,1fr)}
+  .todo{padding:20px 18px}
+  .ctable{padding:4px 12px 12px}
+  .panel-wrap{padding:0}
+  .panel{border-radius:0}
+  .panel-head,.panel-body{padding-left:18px;padding-right:18px}
+  .fgrid{grid-template-columns:minmax(0,1fr)}
+  .list-row{grid-template-columns:minmax(0,1fr) auto;gap:4px 12px}
+  .list-row .lr-meta{display:none}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./config.js"></script>
+<script>
+(function(){
+const {useState,useEffect,useRef,useCallback} = React;
+const html = htm.bind(React.createElement);
+
+/* ---------- Supabase client ----------
+   URL + anon key come from config.js (see config.example.js / README).
+   The anon key is meant to be public — access is controlled by Row Level
+   Security policies in supabase/schema.sql, not by hiding this key. */
+const CONFIG = window.COLLABS_CONFIG || {};
+const SUPABASE_READY = !!(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
+const supabase = SUPABASE_READY
+  ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY)
+  : null;
+
+const EXAMPLE = {"contacts":[{"id":"c1","brand":"Roborock","person":"Lina Ehrlich","email":"lina@roborock-nordics.com","website":"roborock.com","social":"@roborock","folder":"Drive / Roborock 26","lastContactDate":"2026-09-11","followUpDate":"","status":"Worked together","createdAt":1},{"id":"c2","brand":"Nordgreen","person":"Mikkel Sørensen","email":"mikkel@nordgreen.dk","website":"nordgreen.com","social":"@nordgreen","folder":"Drive / Nordgreen AW26","lastContactDate":"2026-09-09","followUpDate":"2026-09-15","status":"Responded","createdAt":2},{"id":"c3","brand":"Stelton","person":"Ida Bruhn","email":"ida.bruhn@stelton.com","website":"stelton.com","social":"@stelton","folder":"Drive / Stelton","lastContactDate":"2026-09-02","followUpDate":"2026-09-18","status":"Interested","createdAt":3},{"id":"c4","brand":"Hay","person":"Oskar Lund","email":"press@hay.dk","website":"hay.dk","social":"@haydesign","folder":"Drive / Hay","lastContactDate":"2026-08-28","followUpDate":"2026-09-14","status":"Follow up","createdAt":4},{"id":"c5","brand":"Skagen Linen","person":"Petra Vind","email":"petra@skagenlinen.dk","website":"skagenlinen.dk","social":"@skagenlinen","folder":"Drive / Skagen","lastContactDate":"2026-09-05","followUpDate":"","status":"Worked together","createdAt":5},{"id":"c6","brand":"Kinfill","person":"Sanne de Wit","email":"sanne@kinfill.com","website":"kinfill.com","social":"@kinfill","folder":"Drive / Kinfill","lastContactDate":"2026-08-20","followUpDate":"2026-10-01","status":"Postponed","createdAt":6},{"id":"c7","brand":"Menu Space","person":"Jonas Riis","email":"jonas@menuspace.com","website":"menuspace.com","social":"@menu_space","folder":"","lastContactDate":"2026-08-14","followUpDate":"2026-09-16","status":"Worked together","createdAt":7},{"id":"c8","brand":"Frama","person":"Cecilie Holm","email":"cecilie@frama.dk","website":"framacph.com","social":"@framacph","folder":"Drive / Frama","lastContactDate":"2026-07-30","followUpDate":"","status":"Hard no","createdAt":8},{"id":"c9","brand":"Vipp","person":"Anders Krag","email":"anders@vipp.com","website":"vipp.com","social":"@vippdesign","folder":"Drive / Vipp","lastContactDate":"2026-06-18","followUpDate":"","status":"Completed","createdAt":9},{"id":"c10","brand":"Aqara","person":"Mei Lin","email":"mei@aqara.eu","website":"aqara.com","social":"@aqara","folder":"Drive / Aqara","lastContactDate":"2026-08-30","followUpDate":"","status":"Worked together","createdAt":10},{"id":"c11","brand":"Muuto","person":"Signe Dahl","email":"signe@muuto.dk","website":"muuto.com","social":"@muuto","folder":"Drive / Muuto","lastContactDate":"2026-05-22","followUpDate":"","status":"Worked together","createdAt":11},{"id":"c12","brand":"Georg Jensen","person":"Rasmus Fog","email":"rasmus@georgjensen.com","website":"georgjensen.com","social":"@georgjensen","folder":"Drive / GJ","lastContactDate":"2026-06-28","followUpDate":"","status":"Worked together","createdAt":12},{"id":"c13","brand":"Ferm Living","person":"Trine Bek","email":"trine@fermliving.com","website":"fermliving.com","social":"@fermliving","folder":"Drive / Ferm","lastContactDate":"2026-08-12","followUpDate":"","status":"Worked together","createdAt":13}],"collabs":[{"id":"k1","contactId":"c1","brand":"Roborock","owner":"Aleksandra","price":2500,"currency":"EUR","finStatus":"Booked","stage":"Order products","kanban":"Ongoing","pitch":"Autumn reset series: robot vacuum in a slow Sunday morning routine, two reels plus stories.","notes":"Brief approved 11 Sept. They ship the S9 by 18 Sept.\nUsage: 6 months paid social, no TV.","folder":"Drive / Roborock 26","contract":"Signed — contracts/roborock-26.pdf","startDate":"2026-09-08","endDate":"2026-09-28","invoice":"Not sent — invoice on delivery","createdAt":1},{"id":"k2","contactId":"c2","brand":"Nordgreen","owner":"Steph","price":13400,"currency":"DKK","finStatus":"Booked","stage":"Shoot","kanban":"Ongoing","pitch":"Two-look watch story shot in soft October light, one reel and a photo set.","notes":"Contract out for signature. Shoot booked with Ellen at the studio.","folder":"Drive / Nordgreen AW26","contract":"Awaiting signature","startDate":"2026-09-01","endDate":"2026-09-30","invoice":"Not sent","createdAt":2},{"id":"k3","contactId":"c5","brand":"Skagen Linen","owner":"Aleksandra","price":9500,"currency":"DKK","finStatus":"Invoiced","stage":"Invoice sent","kanban":"Completed","pitch":"Bedding launch: bedroom refresh reel and a quiet photo series.","notes":"Published 4 Sept, performed 2x above benchmark. Invoice 2026-041 sent 5 Sept, net 14.","folder":"Drive / Skagen","contract":"Signed","startDate":"2026-08-10","endDate":"2026-09-05","invoice":"2026-041 · sent 5 Sept · due 19 Sept","createdAt":3},{"id":"k4","contactId":"c3","brand":"Stelton","owner":"Steph","price":3200,"currency":"EUR","finStatus":"Potential","stage":"Need to respond","kanban":"Potential","pitch":"Kitchen series across three pieces: thermos, kettle and the breakfast table.","notes":"They asked for a quote by 16 Sept. Budget hinted at 3–4k.","folder":"Drive / Stelton","contract":"","startDate":"2026-10-01","endDate":"2026-09-20","invoice":"","createdAt":4},{"id":"k5","contactId":"c4","brand":"Hay","owner":"Aleksandra","price":2200,"currency":"USD","finStatus":"Potential","stage":"Follow up","kanban":"Potential","pitch":"Desk-and-chair corner tour for the home office push.","notes":"Sent rates 28 Aug, no reply. Nudge once more before dropping.","folder":"Drive / Hay","contract":"","startDate":"","endDate":"2026-09-25","invoice":"","createdAt":5},{"id":"k6","contactId":"c6","brand":"Kinfill","owner":"Steph","price":900,"currency":"EUR","finStatus":"Potential","stage":"Waiting on brand","kanban":"Potential","pitch":"Cleaning-cabinet refill ritual, one reel plus stories.","notes":"Postponed to October by the brand.","folder":"Drive / Kinfill","contract":"","startDate":"","endDate":"2026-10-12","invoice":"","createdAt":6},{"id":"k7","contactId":"c9","brand":"Vipp","owner":"Aleksandra","price":2600,"currency":"EUR","finStatus":"Paid","stage":"Done","kanban":"Completed","pitch":"Spring kitchen campaign: one reel, one TikTok, photo set.","notes":"Paid 30 June.","folder":"Drive / Vipp","contract":"Signed","startDate":"2026-05-04","endDate":"2026-06-20","invoice":"2026-022 · paid 30 June","createdAt":7},{"id":"k8","contactId":"c7","brand":"Menu Space","owner":"Steph","price":1500,"currency":"USD","finStatus":"Paid","stage":"Paid","kanban":"Completed","pitch":"One reel for the lighting launch, shot at home.","notes":"Paid 8 Sept. Steph found and closed this one.","folder":"","contract":"Signed","startDate":"2026-08-18","endDate":"2026-09-08","invoice":"2026-043 · paid 8 Sept","createdAt":8},{"id":"k9","contactId":"c10","brand":"Aqara","owner":"Aleksandra","price":12000,"currency":"DKK","finStatus":"Paid","stage":"Done","kanban":"Completed","pitch":"Smart lighting series for the dark evenings.","notes":"Paid 2 Sept.","folder":"Drive / Aqara","contract":"Signed","startDate":"2026-08-05","endDate":"2026-09-02","invoice":"2026-040 · paid 2 Sept","createdAt":9},{"id":"k10","contactId":"c11","brand":"Muuto","owner":"Aleksandra","price":1800,"currency":"EUR","finStatus":"Paid","stage":"Done","kanban":"Completed","pitch":"Living room refresh, two photo sets.","notes":"","folder":"Drive / Muuto","contract":"Signed","startDate":"2026-04-28","endDate":"2026-05-20","invoice":"2026-018 · paid","createdAt":10},{"id":"k11","contactId":"c12","brand":"Georg Jensen","owner":"Steph","price":15000,"currency":"DKK","finStatus":"Paid","stage":"Done","kanban":"Completed","pitch":"Gifting season teaser, one reel and stories.","notes":"","folder":"Drive / GJ","contract":"Signed","startDate":"2026-06-02","endDate":"2026-06-26","invoice":"2026-024 · paid","createdAt":11},{"id":"k12","contactId":"c13","brand":"Ferm Living","owner":"Steph","price":11500,"currency":"DKK","finStatus":"Paid","stage":"Done","kanban":"Completed","pitch":"Balcony summer story, photo set and one reel.","notes":"Paid 20 Aug.","folder":"Drive / Ferm","contract":"Signed","startDate":"2026-07-28","endDate":"2026-08-14","invoice":"2026-031 · paid 20 Aug","createdAt":12},{"id":"k14","contactId":"c11","brand":"Muuto","owner":"Steph","price":1950,"currency":"EUR","finStatus":"Paid","stage":"Done","kanban":"Completed","pitch":"Second round with Muuto: dining corner styling, one reel.","notes":"Repeat booking, paid 28 Aug.","folder":"Drive / Muuto","contract":"Signed","startDate":"2026-08-03","endDate":"2026-08-26","invoice":"2026-036 · paid 28 Aug","createdAt":13},{"id":"k15","contactId":"c10","brand":"Aqara","owner":"Aleksandra","price":9800,"currency":"DKK","finStatus":"Paid","stage":"Done","kanban":"Completed","pitch":"Summer evening lighting story, stories and one reel.","notes":"Paid 24 July.","folder":"Drive / Aqara","contract":"Signed","startDate":"2026-07-02","endDate":"2026-07-22","invoice":"2026-029 · paid 24 July","createdAt":14},{"id":"k13","contactId":"c8","brand":"Frama","owner":"Aleksandra","price":1400,"currency":"EUR","finStatus":"Paid","stage":"Done","kanban":"Completed","pitch":"Bathroom shelf styling, one photo set.","notes":"","folder":"Drive / Frama","contract":"Signed","startDate":"2026-03-30","endDate":"2026-04-18","invoice":"2026-012 · paid","createdAt":15}],"deliverables":[{"id":"d1","collabId":"k1","name":"Reel 1 — morning reset","platform":"Instagram","type":"Reel","status":"Planned","shootDate":"2026-09-21","editDeadline":"2026-09-25","publishDate":"2026-09-28","notes":"","link":"","createdAt":1},{"id":"d2","collabId":"k1","name":"Reel 2 — pet hair test","platform":"Instagram","type":"Reel","status":"Idea","shootDate":"2026-09-21","editDeadline":"2026-10-02","publishDate":"2026-10-06","notes":"","link":"","createdAt":2},{"id":"d3","collabId":"k1","name":"Stories set","platform":"Instagram","type":"Stories","status":"Idea","shootDate":"2026-09-21","editDeadline":"","publishDate":"","notes":"","link":"","createdAt":3},{"id":"d4","collabId":"k1","name":"TikTok cutdown","platform":"TikTok","type":"Video","status":"Idea","shootDate":"","editDeadline":"","publishDate":"","notes":"","link":"","createdAt":4},{"id":"d5","collabId":"k1","name":"Photo set","platform":"Instagram","type":"Photos","status":"Idea","shootDate":"2026-09-21","editDeadline":"","publishDate":"","notes":"","link":"","createdAt":5},{"id":"d6","collabId":"k2","name":"Reel — two looks","platform":"Instagram","type":"Reel","status":"Shooting","shootDate":"2026-09-15","editDeadline":"2026-09-19","publishDate":"2026-09-23","notes":"Studio booked 09:00–13:00.","link":"","createdAt":6},{"id":"d7","collabId":"k2","name":"Photo carousel","platform":"Instagram","type":"Carousel","status":"Planned","shootDate":"2026-09-15","editDeadline":"2026-09-22","publishDate":"2026-09-30","notes":"","link":"","createdAt":7},{"id":"d8","collabId":"k2","name":"Newsletter feature","platform":"Newsletter","type":"Article","status":"Idea","shootDate":"","editDeadline":"","publishDate":"","notes":"","link":"","createdAt":8},{"id":"d9","collabId":"k3","name":"Reel — bedroom refresh","platform":"Instagram","type":"Reel","status":"Published","shootDate":"2026-08-24","editDeadline":"2026-08-31","publishDate":"2026-09-04","notes":"","link":"instagram.com/p/skagen-refresh","createdAt":9},{"id":"d10","collabId":"k3","name":"Photo series","platform":"Instagram","type":"Photos","status":"Published","shootDate":"2026-08-24","editDeadline":"2026-08-31","publishDate":"2026-09-06","notes":"","link":"instagram.com/p/skagen-stills","createdAt":10},{"id":"d11","collabId":"k4","name":"Thermos reel","platform":"Instagram","type":"Reel","status":"Idea","shootDate":"","editDeadline":"","publishDate":"","notes":"","link":"","createdAt":11},{"id":"d12","collabId":"k4","name":"Breakfast table photos","platform":"Instagram","type":"Photos","status":"Idea","shootDate":"","editDeadline":"","publishDate":"","notes":"","link":"","createdAt":12},{"id":"d13","collabId":"k5","name":"Desk corner tour","platform":"Instagram","type":"Reel","status":"Idea","shootDate":"","editDeadline":"","publishDate":"","notes":"","link":"","createdAt":13},{"id":"d14","collabId":"k7","name":"Kitchen reel","platform":"Instagram","type":"Reel","status":"Published","shootDate":"2026-05-12","editDeadline":"2026-05-20","publishDate":"2026-06-02","notes":"","link":"","createdAt":14},{"id":"d15","collabId":"k7","name":"TikTok version","platform":"TikTok","type":"Video","status":"Published","shootDate":"2026-05-12","editDeadline":"2026-05-22","publishDate":"2026-06-09","notes":"","link":"","createdAt":15},{"id":"d16","collabId":"k2","name":"Behind the scenes","platform":"TikTok","type":"Video","status":"Editing","shootDate":"2026-09-15","editDeadline":"2026-09-17","publishDate":"2026-09-18","notes":"","link":"","createdAt":16},{"id":"d17","collabId":"k8","name":"Lighting reel","platform":"Instagram","type":"Reel","status":"Published","shootDate":"2026-08-26","editDeadline":"2026-09-01","publishDate":"2026-09-07","notes":"","link":"","createdAt":17},{"id":"d18","collabId":"k9","name":"Aqara reel","platform":"Instagram","type":"Reel","status":"Editing","shootDate":"2026-09-10","editDeadline":"2026-09-16","publishDate":"2026-09-15","notes":"Ready to send for approval.","link":"","createdAt":18}],"ideas":[{"id":"i1","title":"Five things in my entryway","hook":"Everything by the door earns its place","platform":"Instagram","type":"Reel","collabId":"","scheduledDate":"","createdAt":1},{"id":"i2","title":"How I price a collaboration","hook":"The number is not the fee","platform":"TikTok","type":"Video","collabId":"","scheduledDate":"","createdAt":2},{"id":"i3","title":"Autumn light tour","hook":"One room, four hours apart","platform":"Instagram","type":"Carousel","collabId":"","scheduledDate":"2026-09-25","createdAt":3},{"id":"i4","title":"Sunday reset routine","hook":"Twenty minutes, whole flat","platform":"Instagram","type":"Reel","collabId":"k1","scheduledDate":"","createdAt":4},{"id":"i5","title":"Linen care, honestly","hook":"Stop ironing it","platform":"Newsletter","type":"Article","collabId":"","scheduledDate":"","createdAt":5}],"tasks":[{"id":"t1","group":"Respond","title":"Stelton proposal","meta":"23.872 kr · waiting 2 days","done":false,"collabId":"k4","createdAt":1},{"id":"t2","group":"Respond","title":"Follow up with Hay","meta":"Since 28 Aug","done":false,"collabId":"k5","createdAt":2},{"id":"t3","group":"Content","title":"Aqara Reel","meta":"Edited · ready to send","done":true,"collabId":"k9","createdAt":3},{"id":"t4","group":"Content","title":"Film Nordgreen","meta":"3 deliverables","done":false,"collabId":"k2","createdAt":4},{"id":"t5","group":"Finance","title":"Send Roborock invoice","meta":"18.650 kr","done":false,"collabId":"k1","createdAt":5},{"id":"t6","group":"Finance","title":"Check overdue payments","meta":"1 invoice awaiting payment","done":false,"collabId":"k3","createdAt":6}]};
+
+const STAGES=["Need to respond","Waiting on brand","Follow up","Order products","Products ordered","Products received","Shoot","Edit","Send for approval","Publish","Send invoice","Invoice sent","Paid","Done"];
+const URGENT=["Need to respond","Follow up","Order products","Shoot","Edit","Send invoice"];
+const FIN=["Potential","Booked","Invoiced","Paid"];
+const KAN=["Potential","Ongoing","Completed"];
+const PLATFORMS=["Instagram","TikTok","YouTube","Blog","Newsletter"];
+const DSTATUS=["Idea","Planned","Shooting","Editing","Approval","Scheduled","Published"];
+const CSTATUS=["No response","Responded","Follow up","Postponed","Hard no","Interested","Worked together","Completed"];
+const CURRENCIES=["DKK","EUR","USD"];
+const OWNERS=["Aleksandra","Steph"];
+const STEPH_CUT=0.1;
+const DAYNAMES=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const RING=2*Math.PI*33;
+const TASK_GROUPS=["Respond","Content","Finance"];
+const COLS=["contacts","collabs","deliverables","ideas","tasks"];
+const DEFAULT_SETTINGS={goal:45000,rates:{DKK:1,EUR:7.46,USD:6.4}};
+
+const pad=n=>String(n).padStart(2,"0");
+const isoOf=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const TODAY=isoOf(new Date());
+const parse=iso=>iso?new Date(iso+"T00:00:00"):null;
+const kr=v=>Math.round(v||0).toLocaleString("da-DK")+" kr";
+const krShort=v=>{const n=Math.round(v);return n>=1000?Math.round(n/1000)+"k":String(n)};
+const fmtDate=iso=>{const d=parse(iso);return d?d.getDate()+" "+MONTHS[d.getMonth()].slice(0,3):""};
+const uid=p=>p+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const byCreated=(a,b)=>(a.createdAt||0)-(b.createdAt||0);
+const val=fn=>e=>fn(e.target.value);
+const stop=e=>e.stopPropagation();
+const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:v}catch(e){return d}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+
+/* ---------- auth: real Supabase login shared by the whole team ---------- */
+function useAuth(){
+  const [state,setState]=useState({loading:SUPABASE_READY,session:null});
+  useEffect(()=>{
+    if(!SUPABASE_READY){setState({loading:false,session:null});return}
+    let alive=true;
+    supabase.auth.getSession().then(({data})=>{if(alive)setState({loading:false,session:data.session})});
+    const {data:sub}=supabase.auth.onAuthStateChange((_event,session)=>{if(alive)setState({loading:false,session})});
+    return()=>{alive=false;sub.subscription.unsubscribe()};
+  },[]);
+  return state;
+}
+
+function LoginGate(){
+  const [email,setEmail]=useState("");
+  const [sent,setSent]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState("");
+  const submit=async e=>{
+    e.preventDefault();
+    const v=email.trim();
+    if(!v)return;
+    setBusy(true);setErr("");
+    const {error}=await supabase.auth.signInWithOtp({email:v,options:{emailRedirectTo:window.location.href}});
+    setBusy(false);
+    if(error)setErr(error.message);else setSent(true);
+  };
+  return html`<div className="gate">
+    <div className="gate-card">
+      <h1>Collabs</h1>
+      <p>Sign in with your work email to see and edit the shared board. We'll send a one-time link — no password to remember.</p>
+      ${sent?html`<p className="gate-msg">Check <strong>${email}</strong> for the sign-in link, then come back to this tab.</p>`:html`
+      <form onSubmit=${submit}>
+        <label style=${{display:"block",marginBottom:14}}>
+          <span className="kicker" style=${{display:"block",marginBottom:5}}>Work email</span>
+          <input id="login-email" className="field" type="email" autoFocus required value=${email} onChange=${val(setEmail)} placeholder="you@byggeligt.com"/>
+        </label>
+        <button type="submit" className="btn-dark" style=${{width:"100%"}} disabled=${busy}>${busy?"Sending…":"Send sign-in link"}</button>
+      </form>`}
+      ${err&&html`<p className="gate-err">${err}</p>`}
+    </div>
+  </div>`;
+}
+
+/* ---------- data store: Supabase when configured, in-memory example otherwise ---------- */
+function useStore(){
+  const empty={mode:"loading",contacts:[],collabs:[],deliverables:[],ideas:[],tasks:[],settings:DEFAULT_SETTINGS};
+  const [st,setSt]=useState(empty);
+  const ref=useRef(empty);
+  const dirty=useRef(new Map());
+
+  const update=useCallback(fn=>{const next=fn(ref.current);ref.current=next;setSt(next)},[]);
+
+  useEffect(()=>{
+    let alive=true;
+    if(!SUPABASE_READY){
+      const ex=JSON.parse(JSON.stringify(EXAMPLE));
+      update(s=>({...s,...ex,mode:"local"}));
+      return;
+    }
+    const channels=[];
+    (async()=>{
+      const results=await Promise.all(COLS.map(col=>supabase.from(col).select("*")));
+      if(!alive)return;
+      const failed=results.find(r=>r.error);
+      if(failed){update(s=>({...s,mode:"offline",error:failed.error.message}));return}
+      update(s=>{
+        const n={...s};
+        COLS.forEach((col,i)=>{n[col]=(results[i].data||[]).slice().sort(byCreated)});
+        n.mode="live";
+        return n;
+      });
+      const {data:setRow}=await supabase.from("settings").select("*").eq("id","main").maybeSingle();
+      if(alive&&setRow)update(s=>({...s,settings:{...DEFAULT_SETTINGS,...setRow,rates:{...DEFAULT_SETTINGS.rates,...(setRow.rates||{})}}}));
+
+      COLS.forEach(col=>{
+        const ch=supabase.channel(col+"-changes").on("postgres_changes",{event:"*",schema:"public",table:col},payload=>{
+          update(s=>{
+            let list=s[col].slice();
+            if(payload.eventType==="DELETE"){
+              list=list.filter(x=>x.id!==payload.old.id);
+            }else{
+              const row=payload.new;
+              if(dirty.current.has(col+"/"+row.id))return s;
+              const idx=list.findIndex(x=>x.id===row.id);
+              if(idx>=0)list[idx]=row;else list.push(row);
+            }
+            list.sort(byCreated);
+            return {...s,[col]:list};
+          });
+        }).subscribe();
+        channels.push(ch);
+      });
+      const sch=supabase.channel("settings-changes").on("postgres_changes",{event:"*",schema:"public",table:"settings",filter:"id=eq.main"},payload=>{
+        if(dirty.current.has("settings/main"))return;
+        const d=payload.new;
+        if(d)update(s=>({...s,settings:{...DEFAULT_SETTINGS,...d,rates:{...DEFAULT_SETTINGS.rates,...(d.rates||{})}}}));
+      }).subscribe();
+      channels.push(sch);
+    })();
+    return()=>{alive=false;channels.forEach(c=>supabase.removeChannel(c))};
+  },[]);
+
+  const flush=key=>{
+    const ent=dirty.current.get(key);
+    if(!ent)return;
+    if(ent.inflight){ent.again=true;return}
+    const slash=key.indexOf("/");const col=key.slice(0,slash),id=key.slice(slash+1);
+    const cur=col==="settings"?ref.current.settings:ref.current[col].find(x=>x.id===id);
+    if(!cur){dirty.current.delete(key);return}
+    const body=col==="settings"?{id:"main",...cur}:{...cur};
+    ent.inflight=true;update(s=>({...s,saving:(s.saving||0)+1}));
+    const attempt=n=>supabase.from(col).upsert(body).then(({error})=>{
+      if(error){
+        if(n<1)return new Promise(r=>setTimeout(r,400+Math.random()*600)).then(()=>attempt(n+1));
+        console.warn("write failed",key,error);update(s=>({...s,error:"Couldn't save a change. Check your connection and try again."}));
+      }
+    });
+    attempt(0).finally(()=>{
+      ent.inflight=false;update(s=>({...s,saving:Math.max(0,(s.saving||1)-1)}));
+      if(ent.again){ent.again=false;flush(key);return}
+      setTimeout(()=>{if(!ent.timer&&!ent.inflight&&!ent.again&&dirty.current.get(key)===ent)dirty.current.delete(key)},1500);
+    });
+  };
+  const schedule=(key,delay)=>{
+    if(!SUPABASE_READY)return;
+    let ent=dirty.current.get(key);
+    if(!ent){ent={timer:null,inflight:false,again:false};dirty.current.set(key,ent)}
+    clearTimeout(ent.timer);
+    ent.timer=setTimeout(()=>{ent.timer=null;flush(key)},delay);
+  };
+
+  const api={
+    patch(col,id,fields,delay=450){
+      update(s=>({...s,[col]:s[col].map(o=>o.id===id?{...o,...fields}:o)}));
+      schedule(col+"/"+id,delay);
+    },
+    add(col,item){
+      const it={createdAt:Date.now(),...item};
+      update(s=>({...s,[col]:s[col].concat([it])}));
+      schedule(col+"/"+it.id,0);
+      return it;
+    },
+    remove(pairs){
+      pairs.forEach(([col,id])=>{const k=col+"/"+id;const ent=dirty.current.get(k);if(ent)clearTimeout(ent.timer);dirty.current.delete(k)});
+      update(s=>{const n={...s};pairs.forEach(([col,id])=>{n[col]=n[col].filter(o=>o.id!==id)});return n});
+      if(SUPABASE_READY)pairs.forEach(([col,id])=>supabase.from(col).delete().eq("id",id).then(({error})=>{if(error)console.warn("delete failed",error)}));
+    },
+    settings(fields){
+      update(s=>({...s,settings:{...s.settings,...fields}}));
+      schedule("settings/main",500);
+    },
+    clearError(){update(s=>({...s,error:null}))}
+  };
+  return [st,api];
+}
+
+/* ---------- small pieces ---------- */
+function Options({list}){return list.map(o=>html`<option key=${o} value=${o}>${o}</option>`)}
+
+function Toggle({label,on,onClick}){
+  return html`<button type="button" className=${"toggle"+(on?" on":"")} onClick=${onClick} aria-pressed=${on}>
+    <span className="knob"><span></span></span><span>${label}</span></button>`;
+}
+
+/* ---------- App ---------- */
+function App(){
+  const [st,api]=useStore();
+  const [tab,setTab]=useState(()=>lsGet("collabs.tab","dash"));
+  const [period,setPeriod]=useState("This month");
+  const [showFinance,setShowFinance]=useState(()=>lsGet("collabs.fin","1")==="1");
+  const [showToday,setShowToday]=useState(()=>lsGet("collabs.todo","1")==="1");
+  const [open,setOpen]=useState(null);
+  const [confirm,setConfirm]=useState(null);
+  const [quick,setQuick]=useState(null);
+  const [quickTitle,setQuickTitle]=useState("");
+  const [login,setLogin]=useState(false);
+  const auth=useAuth();
+  const email=(SUPABASE_READY&&auth.session&&auth.session.user&&auth.session.user.email)||lsGet("collabs.email","contact@byggeligt.com");
+  const [calMode,setCalMode]=useState("Month");
+  const [cursor,setCursor]=useState(TODAY);
+  const [sidebar,setSidebar]=useState(true);
+  const [cFilter,setCFilter]=useState("All statuses");
+  const [cSort,setCSort]=useState("Follow-up date");
+  const [dropTarget,setDropTarget]=useState(null);
+  const drag=useRef(null);
+
+  useEffect(()=>lsSet("collabs.tab",tab),[tab]);
+  useEffect(()=>lsSet("collabs.fin",showFinance?"1":"0"),[showFinance]);
+  useEffect(()=>lsSet("collabs.todo",showToday?"1":"0"),[showToday]);
+  useEffect(()=>{
+    const onKey=e=>{if(e.key==="Escape"){if(confirm)setConfirm(null);else if(quick)setQuick(null);else if(login)setLogin(false);else if(open)setOpen(null)}};
+    window.addEventListener("keydown",onKey);return()=>window.removeEventListener("keydown",onKey);
+  },[confirm,quick,login,open]);
+  useEffect(()=>{
+    const anyOpen=!!(confirm||quick||login||open);
+    document.body.style.overflow=anyOpen?"hidden":"";
+    return()=>{document.body.style.overflow=""};
+  },[confirm,quick,login,open]);
+
+  if(SUPABASE_READY&&auth.loading)return html`<div className="gate"><span className="kicker">Loading…</span></div>`;
+  if(SUPABASE_READY&&!auth.session)return html`<${LoginGate}/>`;
+
+  const {contacts,collabs,deliverables,ideas,tasks,settings}=st;
+  const rates=settings.rates||DEFAULT_SETTINGS.rates;
+  const goal=Number(settings.goal)||0;
+  const dkk=c=>Math.round((Number(c.price)||0)*(rates[c.currency]||1));
+  const brandOf=id=>{const c=collabs.find(x=>x.id===id);return c?c.brand:""};
+  const collabDate=c=>{const d=deliverables.filter(x=>x.collabId===c.id&&x.publishDate).map(x=>x.publishDate).sort();return d[0]||c.endDate||c.startDate||TODAY};
+  const t=parse(TODAY);
+  const prev=new Date(t.getFullYear(),t.getMonth()-1,1);
+  const inPeriod=iso=>{
+    if(period==="All time")return true;
+    const d=parse(iso)||t;
+    if(period==="This year")return d.getFullYear()===t.getFullYear();
+    if(period==="This month")return d.getFullYear()===t.getFullYear()&&d.getMonth()===t.getMonth();
+    return d.getFullYear()===prev.getFullYear()&&d.getMonth()===prev.getMonth();
+  };
+  const monthRevenue=(y,m,statuses)=>collabs.filter(c=>{const d=parse(collabDate(c));return d&&d.getFullYear()===y&&d.getMonth()===m&&statuses.includes(c.finStatus)}).reduce((a,c)=>a+dkk(c),0);
+
+  const askDelete=(title,detail,onYes)=>setConfirm({title,detail,onYes});
+  const startDrag=(kind,id)=>e=>{drag.current={kind,id};if(e.dataTransfer){e.dataTransfer.effectAllowed="move";try{e.dataTransfer.setData("text/plain",id)}catch(err){}}};
+  const endDrag=()=>{drag.current=null;setDropTarget(null)};
+  const allowDrop=target=>e=>{e.preventDefault();if(dropTarget!==target)setDropTarget(target)};
+  const leaveDrop=target=>e=>{if(!e.currentTarget.contains(e.relatedTarget)&&dropTarget===target)setDropTarget(null)};
+
+  const deleteCollab=c=>{
+    const dels=deliverables.filter(d=>d.collabId===c.id);
+    askDelete("Delete "+c.brand+"?","The collaboration and its "+dels.length+(dels.length===1?" deliverable go":" deliverables go")+" with it. The contact stays in Contacts.",()=>{
+      api.remove([["collabs",c.id],...dels.map(d=>["deliverables",d.id])]);
+      if(open===c.id)setOpen(null);
+    });
+  };
+  const newCollab=(kanban,contact)=>{
+    let ct=contact;
+    if(!ct)ct=api.add("contacts",{id:uid("c"),brand:"New brand",person:"",email:"",website:"",social:"",folder:"",lastContactDate:TODAY,followUpDate:"",status:"Responded"});
+    const c=api.add("collabs",{id:uid("k"),contactId:ct.id,brand:ct.brand,owner:"Aleksandra",price:0,currency:"DKK",finStatus:kanban==="Potential"?"Potential":"Booked",stage:kanban==="Completed"?"Done":kanban==="Ongoing"?"Order products":"Need to respond",kanban:kanban||"Potential",pitch:"",notes:"",folder:"",contract:"",startDate:"",endDate:"",invoice:""});
+    setTab("dash");setOpen(c.id);
+  };
+
+  const common={st,api,dkk,brandOf,collabDate,startDrag,endDrag,allowDrop,leaveDrop,dropTarget,setDropTarget,drag,askDelete,setOpen,setTab,deleteCollab,newCollab};
+
+  const sync = st.mode==="loading"?"Loading…":st.mode==="local"?"Example data · not saved":st.mode==="offline"?"Read-only":(st.saving?"Saving…":"Saved");
+
+  return html`
+  <div>
+    <header className="hdr">
+      <div className="hdr-row">
+        <span className="brand">Collabs</span>
+        <nav className="tabs">
+          ${[["dash","Dashboard"],["cal","Calendar"],["contacts","Contacts"]].map(([k,l])=>html`<button key=${k} type="button" className=${"tab"+(tab===k?" on":"")} onClick=${()=>setTab(k)}>${l}</button>`)}
+        </nav>
+        <div className="hdr-right">
+          <div style=${{display:"flex",gap:4}}>
+            <${Toggle} label="Finance" on=${showFinance} onClick=${()=>setShowFinance(!showFinance)}/>
+            <${Toggle} label="To do" on=${showToday} onClick=${()=>setShowToday(!showToday)}/>
+          </div>
+          <span className="sync" aria-live="polite">${sync}</span>
+          <span className="today-lbl num" style=${{fontSize:13,color:"var(--muted)"}}>${t.toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}</span>
+          <button type="button" className="acct" onClick=${()=>setLogin(true)} title=${SUPABASE_READY?"Account":"Your label on this device"}>
+            <span className="avatar">${(email||"?").slice(0,2).toUpperCase()}</span>
+            <span style=${{fontSize:12.5,fontWeight:500}}>${(email||"").split("@")[0]}</span>
+          </button>
+        </div>
+      </div>
+      ${st.error&&html`<div style=${{display:"flex",gap:10,alignItems:"center",padding:"8px 0",fontSize:12.5}}>
+        <span>${st.error}</span><button type="button" className="x" onClick=${api.clearError} aria-label="Dismiss">✕</button></div>`}
+    </header>
+
+    ${tab==="dash"&&html`<${Dashboard} ...${common} period=${period} setPeriod=${setPeriod} showFinance=${showFinance} showToday=${showToday}
+        goal=${goal} inPeriod=${inPeriod} monthRevenue=${monthRevenue} t=${t} prev=${prev}/>`}
+    ${tab==="cal"&&html`<${Calendar} ...${common} calMode=${calMode} setCalMode=${setCalMode} cursor=${cursor} setCursor=${setCursor}
+        sidebar=${sidebar} setSidebar=${setSidebar} openQuick=${iso=>{setQuick(iso);setQuickTitle("")}}/>`}
+    ${tab==="contacts"&&html`<${Contacts} ...${common} cFilter=${cFilter} setCFilter=${setCFilter} cSort=${cSort} setCSort=${setCSort}/>`}
+
+    ${open&&collabs.find(c=>c.id===open)&&html`<${CollabPanel} ...${common} collab=${collabs.find(c=>c.id===open)} onClose=${()=>setOpen(null)}/>`}
+
+    ${quick&&html`<div className="scrim center" onClick=${()=>setQuick(null)}>
+      <div className="dialog" onClick=${stop} role="dialog" aria-modal="true" aria-labelledby="qa-t">
+        <h4 id="qa-t">Add event</h4>
+        <p style=${{fontSize:12.5,color:"var(--muted)",margin:"0 0 16px"}}>${parse(quick).toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"})}</p>
+        <form onSubmit=${e=>{e.preventDefault();const title=quickTitle.trim();if(title)api.add("ideas",{id:uid("i"),title,hook:"",concept:"",platform:"Instagram",type:"Reel",collabId:"",scheduledDate:quick});setQuick(null)}}>
+          <label style=${{display:"block",marginBottom:18}}>
+            <span className="kicker" style=${{display:"block",marginBottom:5}}>Title</span>
+            <input id="quick-title" className="field" autoFocus value=${quickTitle} onChange=${val(setQuickTitle)} placeholder="e.g. Hallway before and after"/>
+          </label>
+          <div style=${{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            <button type="button" className="btn" onClick=${()=>setQuick(null)}>Cancel</button>
+            <button type="submit" className="btn-dark">💡 Add idea</button>
+          </div>
+        </form>
+      </div></div>`}
+
+    ${login&&html`<div className="scrim center" onClick=${()=>setLogin(false)}>
+      <div className="dialog" onClick=${stop} role="dialog" aria-modal="true" aria-labelledby="lg-t" aria-describedby="lg-d">
+        <h4 id="lg-t">${SUPABASE_READY?"Your account":"Your label on this device"}</h4>
+        ${SUPABASE_READY?html`
+          <p id="lg-d" style=${{fontSize:12.5,color:"var(--muted)",margin:"0 0 20px",lineHeight:1.5}}>Signed in as <strong>${email}</strong>. Sign out to switch accounts on this device.</p>
+          <div style=${{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            <button type="button" className="btn" onClick=${()=>setLogin(false)}>Close</button>
+            <button type="button" className="btn-dark" onClick=${async()=>{await supabase.auth.signOut();setLogin(false)}}>Sign out</button>
+          </div>
+        `:html`
+          <p id="lg-d" style=${{fontSize:12.5,color:"var(--muted)",margin:"0 0 20px",lineHeight:1.5}}>This is example data running without a database — see the project README to connect Supabase so changes save for the whole team.</p>
+          <div style=${{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            <button type="button" className="btn" onClick=${()=>setLogin(false)}>Close</button>
+          </div>
+        `}
+      </div></div>`}
+
+    ${confirm&&html`<div className="scrim center" onClick=${()=>setConfirm(null)}>
+      <div className="dialog" style=${{width:"min(400px,100%)"}} onClick=${stop} role="alertdialog" aria-modal="true" aria-labelledby="cf-t">
+        <h4 id="cf-t" style=${{marginBottom:6}}>${confirm.title}</h4>
+        <p style=${{fontSize:13.5,color:"var(--ink-2)",margin:"0 0 20px"}}>${confirm.detail}</p>
+        <div style=${{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <button type="button" className="btn" onClick=${()=>setConfirm(null)}>Cancel</button>
+          <button type="button" className="btn-dark" autoFocus onClick=${()=>{const c=confirm;setConfirm(null);c.onYes()}}>Delete</button>
+        </div>
+      </div></div>`}
+  </div>`;
+}
+
+/* ---------- Dashboard ---------- */
+function Dashboard(p){
+  const {st,api,dkk,collabDate,period,setPeriod,showFinance,showToday,goal,inPeriod,monthRevenue,t,prev,setOpen,askDelete}=p;
+  const {collabs,deliverables,tasks}=st;
+  const scoped=collabs.filter(c=>inPeriod(collabDate(c)));
+  const won=scoped.filter(c=>c.finStatus!=="Potential");
+  const secured=won.reduce((a,c)=>a+dkk(c),0);
+  const pct=goal>0?Math.round(secured/goal*100):0;
+  const stephList=scoped.filter(c=>c.owner==="Steph");
+  const stephCut=stephList.reduce((a,c)=>a+dkk(c),0)*STEPH_CUT;
+  const thisMonth=monthRevenue(t.getFullYear(),t.getMonth(),["Paid","Invoiced"]);
+  const lastMonth=monthRevenue(prev.getFullYear(),prev.getMonth(),["Paid","Invoiced"]);
+  const mom=lastMonth>0?Math.round((thisMonth-lastMonth)/lastMonth*100):null;
+  const avg=won.length?Math.round(secured/won.length):0;
+  const titleMap={"This month":MONTHS[t.getMonth()]+" performance","Last month":MONTHS[prev.getMonth()]+" performance","This year":t.getFullYear()+" performance","All time":"All-time performance"};
+
+  const kpis=[
+    {label:"Revenue this month",value:kr(thisMonth),delta:mom===null?"No comparison":(mom>=0?"+":"")+mom+"% vs "+MONTHS[prev.getMonth()],dc:mom!==null&&mom<0?"var(--muted)":"var(--ink)",
+      sub:kr(monthRevenue(t.getFullYear(),t.getMonth(),["Booked"]))+" booked · "+kr(monthRevenue(t.getFullYear(),t.getMonth(),["Invoiced"]))+" invoiced"},
+    {label:"Average collab value",value:kr(avg),delta:won.length+" won collabs",dc:"var(--ink-2)",sub:"Across the selected period"},
+    {label:"Steph's cut",value:kr(stephCut),delta:stephList.length+" collabs",dc:"var(--ink-2)",sub:"10% of Steph's collabs"}
+  ];
+
+  // chart
+  const months=[];
+  for(let i=6;i>=0;i--){const d=new Date(t.getFullYear(),t.getMonth()-i,1);months.push({y:d.getFullYear(),m:d.getMonth(),label:MONTHS[d.getMonth()].slice(0,3)})}
+  const values=months.map(x=>monthRevenue(x.y,x.m,["Paid","Invoiced"]));
+  const top=30,bottom=160,plot=bottom-top,vbH=186;
+  const maxVal=Math.max(goal,...values)*1.16||1;
+  const yFor=v=>bottom-(v/maxVal)*plot;
+  const xFor=i=>30+i*((700-30)/(months.length-1));
+  const pts=values.map((v,i)=>({x:xFor(i),y:yFor(v)}));
+  let path="M"+pts[0].x.toFixed(1)+","+pts[0].y.toFixed(1);
+  for(let i=0;i<pts.length-1;i++){
+    const p0=pts[i-1]||pts[i],p1=pts[i],p2=pts[i+1],p3=pts[i+2]||p2;
+    path+=" C"+(p1.x+(p2.x-p0.x)/6).toFixed(1)+","+(p1.y+(p2.y-p0.y)/6).toFixed(1)+" "+(p2.x-(p3.x-p1.x)/6).toFixed(1)+","+(p2.y-(p3.y-p1.y)/6).toFixed(1)+" "+p2.x.toFixed(1)+","+p2.y.toFixed(1);
+  }
+  const area=path+" L"+pts[pts.length-1].x.toFixed(1)+","+bottom+" L"+pts[0].x.toFixed(1)+","+bottom+" Z";
+  const goalTop=yFor(goal);
+
+  const openTasks=tasks.filter(x=>!x.done).length;
+
+  return html`<div className="page">
+    <div className="title-row">
+      <h1>${titleMap[period]}</h1>
+      <span style=${{fontSize:13,color:"var(--muted)"}}>${scoped.length} collaborations in view</span>
+      <div className="pills" style=${{marginLeft:"auto"}}>
+        ${["This month","Last month","This year","All time"].map(x=>html`<button key=${x} type="button" className=${"pill"+(period===x?" on":"")} onClick=${()=>setPeriod(x)}>${x}</button>`)}
+      </div>
+    </div>
+
+    ${showFinance&&html`<div>
+      <section className="kpis">
+        ${kpis.map(k=>html`<div key=${k.label} className="card kpi">
+          <div className="kicker">${k.label}</div>
+          <div className="kpi-val num">${k.value}</div>
+          <div className="kpi-delta" style=${{color:k.dc}}>${k.delta}</div>
+          <div className="kpi-sub">${k.sub}</div>
+        </div>`)}
+      </section>
+      <section className="chart-row">
+        <div className="card chart-card">
+          <div style=${{display:"flex",alignItems:"baseline",gap:12,flexWrap:"wrap",marginBottom:2}}>
+            <h3 style=${{fontSize:15,fontWeight:600,margin:0,letterSpacing:"-.018em"}}>Revenue month after month</h3>
+            <span style=${{fontSize:12.5,color:"var(--muted)"}}>Paid and invoiced, in DKK</span>
+            <div style=${{marginLeft:"auto",display:"flex",alignItems:"baseline",gap:10}}>
+              <span className="num" style=${{fontSize:20,fontWeight:700,letterSpacing:"-.03em",color:mom!==null&&mom<0?"var(--muted)":"var(--ink)"}}>${mom===null?"—":(mom>=0?"+":"")+mom+"%"}</span>
+              <span style=${{fontSize:12.5,color:"var(--ink-2)"}}>${mom===null?"no comparison with "+MONTHS[prev.getMonth()]:kr(Math.abs(thisMonth-lastMonth))+(thisMonth>=lastMonth?" more than ":" less than ")+MONTHS[prev.getMonth()]}</span>
+            </div>
+          </div>
+          <div style=${{position:"relative",height:186,marginTop:4}}>
+            <svg viewBox="0 0 720 186" preserveAspectRatio="none" style=${{position:"absolute",inset:0,width:"100%",height:"100%",display:"block"}} aria-hidden="true">
+              <path d=${area} fill="var(--fill)"></path>
+              <path d=${"M20,"+goalTop.toFixed(1)+" L700,"+goalTop.toFixed(1)} fill="none" stroke="var(--dash)" strokeWidth="1" strokeDasharray="4 5" vectorEffect="non-scaling-stroke"></path>
+              <path d=${path} fill="none" stroke="var(--ink)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"></path>
+            </svg>
+            <span style=${{position:"absolute",right:0,top:(goalTop/vbH*100).toFixed(2)+"%",transform:"translateY(-135%)",fontSize:10.5,color:"var(--muted)",whiteSpace:"nowrap"}}>Goal ${kr(goal)}</span>
+            ${months.map((x,i)=>{const cur=i===months.length-1;const size=cur?10:8;return html`<span key=${i} style=${{position:"absolute",left:(pts[i].x/720*100).toFixed(2)+"%",top:(pts[i].y/vbH*100).toFixed(2)+"%",width:0,height:0}}>
+              <span style=${{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",width:size,height:size,borderRadius:"50%",border:"2px solid var(--ink)",background:cur?"var(--ink)":"var(--surface)"}}></span>
+              <span className="num" style=${{position:"absolute",left:"50%",top:-14,transform:"translate(-50%,-100%)",fontSize:11,fontWeight:cur?600:400,color:cur?"var(--ink)":"var(--muted)",whiteSpace:"nowrap"}}>${values[i]>0?krShort(values[i]):"0"}</span>
+            </span>`})}
+          </div>
+          <div style=${{position:"relative",height:26}}>
+            ${months.map((x,i)=>{const cur=i===months.length-1;return html`<span key=${i} style=${{position:"absolute",left:(pts[i].x/720*100).toFixed(2)+"%",top:4,transform:"translateX(-50%)",fontSize:11.5,fontWeight:cur?600:400,color:cur?"var(--ink)":"var(--muted)",whiteSpace:"nowrap"}}>${x.label}</span>`})}
+          </div>
+        </div>
+
+        <div className="card goal-card">
+          <div className="kicker" style=${{alignSelf:"stretch"}}>Booked vs goal</div>
+          <div style=${{position:"relative",width:158,height:158,margin:"18px 0 14px"}}>
+            <svg viewBox="0 0 80 80" width="158" height="158" style=${{display:"block",transform:"rotate(-90deg)"}} aria-hidden="true">
+              <circle cx="40" cy="40" r="33" fill="none" stroke="var(--hot)" strokeWidth="7"></circle>
+              <circle cx="40" cy="40" r="33" fill="none" stroke="var(--ink)" strokeWidth="7" strokeLinecap="round" strokeDasharray=${(RING*Math.min(1,pct/100)).toFixed(1)+" "+RING.toFixed(1)}></circle>
+            </svg>
+            <div style=${{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+              <span className="num" style=${{fontSize:34,fontWeight:700,letterSpacing:"-.04em",lineHeight:1}}>${pct}%</span>
+              <span className="num" style=${{fontSize:12,color:"var(--muted)",marginTop:4}}>${kr(secured)}</span>
+            </div>
+          </div>
+          <div style=${{alignSelf:"stretch",paddingTop:14,borderTop:"1px solid var(--line)",display:"flex",alignItems:"baseline",gap:4}}>
+            <label htmlFor="goal-in" style=${{fontSize:12.5,color:"var(--ink-2)"}}>of</label>
+            <input id="goal-in" type="number" step="1000" min="0" className="goal-input num" title="Monthly goal in DKK" value=${goal} onChange=${val(v=>api.settings({goal:Number(v)||0}))}/>
+            <span style=${{fontSize:12.5,color:"var(--ink-2)"}}>kr</span>
+            <span className="num" style=${{marginLeft:"auto",fontSize:12.5,fontWeight:500,whiteSpace:"nowrap"}}>${pct>=100?"Goal reached":kr(goal-secured)+" to go"}</span>
+          </div>
+        </div>
+      </section>
+    </div>`}
+
+    ${showToday&&html`<section className="todo">
+      <div style=${{display:"flex",alignItems:"baseline",gap:12,marginBottom:14,flexWrap:"wrap"}}>
+        <h2 style=${{fontSize:22,fontWeight:700,margin:0,letterSpacing:"-.035em"}}>To do</h2>
+        <span style=${{fontSize:14,color:"var(--muted)"}}>${openTasks}${openTasks===1?" thing needs":" things need"} your attention</span>
+      </div>
+      <div className="todo-grid">
+        ${TASK_GROUPS.map(group=>{const items=tasks.filter(x=>x.group===group);return html`<div key=${group}>
+          <div style=${{fontSize:12,fontWeight:500,letterSpacing:".14em",textTransform:"uppercase",color:"var(--muted)",marginBottom:10}}>${group}</div>
+          ${items.map(x=>html`<div key=${x.id} className="task">
+            <button type="button" className=${"check"+(x.done?" done":"")} aria-label=${x.done?"Mark as not done":"Mark as done"} onClick=${()=>api.patch("tasks",x.id,{done:!x.done},0)}></button>
+            <div style=${{flex:1,minWidth:0}}>
+              <input id=${"task-t-"+x.id} className="quiet" aria-label="Task" value=${x.title} onChange=${val(v=>api.patch("tasks",x.id,{title:v}))}
+                style=${{display:"block",width:"100%",fontSize:15,fontWeight:500,letterSpacing:"-.018em",color:x.done?"var(--muted)":"var(--ink)",textDecoration:x.done?"line-through":"none"}}/>
+              <div style=${{display:"flex",alignItems:"baseline",gap:8}}>
+                <input id=${"task-m-"+x.id} className="quiet" aria-label="Details" placeholder="Add details" value=${x.meta} onChange=${val(v=>api.patch("tasks",x.id,{meta:v}))}
+                  style=${{flex:1,minWidth:0,fontSize:13,color:x.done?"var(--dash-2)":"var(--muted)",textDecoration:x.done?"line-through":"none"}}/>
+                ${x.collabId&&st.collabs.some(c=>c.id===x.collabId)&&html`<button type="button" onClick=${()=>setOpen(x.collabId)} style=${{flex:"none",background:"transparent",border:0,padding:0,fontSize:11.5,color:"var(--muted)",textDecoration:"underline",textUnderlineOffset:2}}>Open</button>`}
+              </div>
+            </div>
+            <button type="button" className="x" aria-label="Delete task" onClick=${()=>askDelete("Delete this task?","“"+x.title+"” will be removed from To do.",()=>api.remove([["tasks",x.id]]))}>✕</button>
+          </div>`)}
+          ${items.length===0&&html`<span style=${{fontSize:13,color:"var(--faint)"}}>Nothing here</span>`}
+          <button type="button" className="add-row" onClick=${()=>api.add("tasks",{id:uid("t"),group,title:"New task",meta:"",done:false,collabId:""})}>
+            <span className="add-dot">+</span><span>Add task</span></button>
+        </div>`})}
+      </div>
+    </section>`}
+
+    <section className="kanban">
+      ${KAN.map(col=>{
+        const list=collabs.filter(c=>c.kanban===col);
+        return html`<div key=${col} className=${"col"+(p.dropTarget==="col:"+col?" hot":"")} onDragOver=${p.allowDrop("col:"+col)} onDragLeave=${p.leaveDrop("col:"+col)}
+          onDrop=${e=>{e.preventDefault();const d=p.drag.current;p.setDropTarget(null);if(d&&d.kind==="collab")api.patch("collabs",d.id,{kanban:col},0);p.drag.current=null}}>
+          <div style=${{display:"flex",alignItems:"baseline",gap:9,padding:"0 2px 12px"}}>
+            <h3 style=${{fontSize:14,fontWeight:600,margin:0,letterSpacing:"-.018em"}}>${col}</h3>
+            <span className="num" style=${{fontSize:12,color:"var(--faint)"}}>${list.length}</span>
+            <span className="num" style=${{marginLeft:"auto",fontSize:12,color:"var(--ink-2)"}}>${kr(list.reduce((a,c)=>a+dkk(c),0))}</span>
+          </div>
+          <div style=${{display:"flex",flexDirection:"column",gap:10}}>
+            ${list.map(c=>html`<${KanbanCard} key=${c.id} c=${c} ...${p}/>`)}
+            ${list.length===0&&html`<div className="empty-drop">Drag a collaboration here</div>`}
+            <button type="button" className="add-collab" onClick=${()=>p.newCollab(col)}>+ Add collaboration</button>
+          </div>
+        </div>`;
+      })}
+    </section>
+  </div>`;
+}
+
+function KanbanCard(p){
+  const {c,st,api,dkk,setOpen,deleteCollab}=p;
+  const dels=st.deliverables.filter(d=>d.collabId===c.id);
+  const next=dels.filter(d=>d.publishDate).map(d=>d.publishDate).sort()[0];
+  const urgent=URGENT.includes(c.stage);
+  return html`<article className="kcard" draggable="true" onDragStart=${p.startDrag("collab",c.id)} onDragEnd=${p.endDrag} onClick=${()=>setOpen(c.id)}>
+    <div style=${{display:"flex",alignItems:"baseline",gap:8}}>
+      <span style=${{fontSize:15,fontWeight:600,letterSpacing:"-.022em",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>${c.brand}</span>
+      <span style=${{fontSize:11,color:"var(--faint)"}}>${c.owner}</span>
+      <span style=${{marginLeft:"auto",display:"flex",alignItems:"baseline",gap:3}}>
+        <input id=${"kp-"+c.id} type="number" aria-label="Price" className="num" value=${c.price} onClick=${stop} onChange=${val(v=>api.patch("collabs",c.id,{price:Number(v)||0}))}
+          style=${{width:72,textAlign:"right",background:"transparent",border:0,borderRadius:6,padding:"1px 3px",fontSize:15,fontWeight:600}}/>
+        <select id=${"kc-"+c.id} aria-label="Currency" value=${c.currency} onClick=${stop} onChange=${val(v=>api.patch("collabs",c.id,{currency:v},0))} style=${{background:"transparent",border:0,fontSize:11,color:"var(--muted)"}}><${Options} list=${CURRENCIES}/></select>
+      </span>
+    </div>
+    <div className="num" style=${{fontSize:11.5,color:"var(--faint)",textAlign:"right",minHeight:c.currency==="DKK"?0:17}}>${c.currency==="DKK"?"":"≈ "+kr(dkk(c))}</div>
+    ${c.pitch&&html`<p className="clamp">${c.pitch}</p>`}
+    <div style=${{display:"flex",alignItems:"center",gap:7,marginTop:12}}>
+      <span style=${{width:6,height:6,borderRadius:"50%",flex:"none",background:urgent?"var(--ink)":"var(--dash-2)"}}></span>
+      <select id=${"ks-"+c.id} aria-label="Stage" className="qsel" value=${c.stage} onClick=${stop} onChange=${val(v=>api.patch("collabs",c.id,{stage:v},0))}
+        style=${{color:urgent?"var(--ink)":"var(--muted)",fontWeight:urgent?500:400}}><${Options} list=${STAGES}/></select>
+    </div>
+    <div style=${{display:"flex",alignItems:"center",gap:10,marginTop:12,paddingTop:11,borderTop:"1px solid var(--line-2)",fontSize:11.5,color:"var(--muted)"}}>
+      <span className="num">${next?"Publishes "+fmtDate(next):"No date yet"}</span>
+      <span style=${{marginLeft:"auto"}}>${dels.length}${dels.length===1?" item":" items"}</span>
+      <span>${c.finStatus}</span>
+      <button type="button" className="x" style=${{width:20,height:20}} aria-label=${"Delete "+c.brand} onClick=${e=>{e.stopPropagation();deleteCollab(c)}}>✕</button>
+    </div>
+  </article>`;
+}
+
+/* ---------- Calendar ---------- */
+function Calendar(p){
+  const {st,api,brandOf,calMode,setCalMode,cursor,setCursor,sidebar,setSidebar,openQuick,setOpen,setTab,askDelete,drag,setDropTarget,dropTarget}=p;
+  const {deliverables,ideas}=st;
+  const cur=parse(cursor);
+  const weekStart=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()-((cur.getDay()+6)%7));
+  const step=n=>()=>setCursor(isoOf(calMode==="Week"?new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()+7*n):new Date(cur.getFullYear(),cur.getMonth()+n,1)));
+  const openCollab=id=>{setTab("dash");setOpen(id)};
+
+  const dropOnDate=iso=>e=>{
+    e.preventDefault();const d=drag.current;setDropTarget(null);if(!d)return;
+    if(d.kind==="deliverable"){const x=deliverables.find(o=>o.id===d.id);api.patch("deliverables",d.id,{publishDate:iso,status:x&&x.status==="Published"?"Published":"Scheduled"},0)}
+    if(d.kind==="idea")api.patch("ideas",d.id,{scheduledDate:iso},0);
+    drag.current=null;
+  };
+  const dropOnSidebar=e=>{
+    e.preventDefault();const d=drag.current;setDropTarget(null);if(!d)return;
+    if(d.kind==="deliverable")api.patch("deliverables",d.id,{publishDate:""},0);
+    if(d.kind==="idea")api.patch("ideas",d.id,{scheduledDate:""},0);
+    drag.current=null;
+  };
+
+  let start,count;
+  if(calMode==="Week"){start=weekStart;count=7}
+  else{const first=new Date(cur.getFullYear(),cur.getMonth(),1);start=new Date(cur.getFullYear(),cur.getMonth(),1-((first.getDay()+6)%7));count=42}
+  const cells=[];
+  for(let i=0;i<count;i++){
+    const day=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i);
+    const iso=isoOf(day);
+    const items=[];
+    deliverables.filter(d=>d.publishDate===iso).forEach(d=>items.push({key:d.id,kind:"deliverable",icon:"🤝",title:brandOf(d.collabId)+" — "+d.name,onClick:e=>{e.stopPropagation();openCollab(d.collabId)}}));
+    ideas.filter(x=>x.scheduledDate===iso).forEach(x=>items.push({key:x.id,kind:"idea",icon:"💡",title:x.title,onClick:e=>e.stopPropagation()}));
+    cells.push({iso,num:day.getDate(),dim:calMode==="Month"&&day.getMonth()!==cur.getMonth(),today:iso===TODAY,items});
+  }
+  if(calMode==="Month"){while(cells.length>35&&cells.slice(-7).every(c=>c.dim))cells.splice(-7)}
+
+  const monthStart=isoOf(new Date(cur.getFullYear(),cur.getMonth(),1));
+  const rows=[];
+  deliverables.filter(d=>d.publishDate&&d.publishDate>=monthStart).forEach(d=>rows.push({key:d.id,sort:d.publishDate,title:brandOf(d.collabId)+" — "+d.name,meta:d.platform+" · "+d.type,status:d.status,onClick:()=>openCollab(d.collabId)}));
+  ideas.filter(x=>x.scheduledDate&&x.scheduledDate>=monthStart).forEach(x=>rows.push({key:x.id,sort:x.scheduledDate,title:"💡 "+x.title,meta:x.platform+" · "+x.type,status:"Idea",onClick:()=>{}}));
+  rows.sort((a,b)=>a.sort.localeCompare(b.sort));
+
+  const unsD=deliverables.filter(d=>!d.publishDate);
+  const unsI=ideas.filter(x=>!x.scheduledDate);
+
+  return html`<div className="cal-wrap">
+    <div className="cal-main">
+      <div style=${{display:"flex",alignItems:"center",gap:14,marginBottom:14,flexWrap:"wrap"}}>
+        <h2 style=${{fontSize:24,fontWeight:700,margin:0,minWidth:190,letterSpacing:"-.035em"}}>${calMode==="Week"?"Week of "+fmtDate(isoOf(weekStart)):calMode==="List"?"From "+MONTHS[cur.getMonth()]+" "+cur.getFullYear():MONTHS[cur.getMonth()]+" "+cur.getFullYear()}</h2>
+        <div style=${{display:"flex",gap:6}}>
+          <button type="button" className="nav-btn" aria-label="Previous" onClick=${step(-1)}>←</button>
+          <button type="button" className="nav-btn" aria-label="Next" onClick=${step(1)}>→</button>
+          <button type="button" className="nav-btn" style=${{width:"auto",padding:"0 13px",fontSize:12.5}} onClick=${()=>setCursor(TODAY)}>Today</button>
+        </div>
+        <div className="pills" style=${{marginLeft:"auto",padding:4}}>
+          ${["Month","Week","List"].map(m=>html`<button key=${m} type="button" className=${"pill"+(calMode===m?" on":"")} onClick=${()=>setCalMode(m)}>${m}</button>`)}
+        </div>
+      </div>
+
+      ${calMode!=="List"?html`<div className="card grid-scroll" style=${{padding:"16px 18px 18px"}}>
+        <div className="grid7" style=${{marginBottom:8}}>${DAYNAMES.map(d=>html`<span key=${d} className="kicker" style=${{paddingLeft:4}}>${d}</span>`)}</div>
+        <div className="grid7">
+          ${cells.map(c=>html`<div key=${c.iso} className=${"cell"+(dropTarget==="date:"+c.iso?" hot":"")}
+              style=${{minHeight:calMode==="Week"?340:112,opacity:c.dim?.45:1}}
+              onClick=${()=>openQuick(c.iso)} onDragOver=${p.allowDrop("date:"+c.iso)} onDragLeave=${p.leaveDrop("date:"+c.iso)} onDrop=${dropOnDate(c.iso)}>
+            <div style=${{marginBottom:6}}>
+              <span className="num" style=${c.today?{fontSize:11.5,background:"var(--ink)",color:"var(--surface)",borderRadius:999,padding:"2px 7px",fontWeight:500}:{fontSize:11.5,color:"var(--muted)"}}>${c.num}</span>
+            </div>
+            <div style=${{display:"flex",flexDirection:"column",gap:5}}>
+              ${c.items.map(it=>html`<div key=${it.key} className=${"chip"+(it.kind==="idea"?" idea":"")} draggable="true" title=${it.title}
+                  onDragStart=${p.startDrag(it.kind,it.key)} onDragEnd=${p.endDrag} onClick=${it.onClick}>
+                <span style=${{flex:"none",fontSize:12,lineHeight:1}}>${it.icon}</span><span className="chip-t">${it.title}</span></div>`)}
+            </div>
+          </div>`)}
+        </div>
+      </div>`:html`<div className="card" style=${{padding:"6px 20px 14px"}}>
+        ${rows.length===0&&html`<p style=${{color:"var(--muted)",fontSize:13,padding:"14px 8px",margin:0}}>Nothing scheduled from here on.</p>`}
+        ${rows.map(r=>html`<div key=${r.key} className="list-row" onClick=${r.onClick}>
+          <span className="num" style=${{fontSize:12,color:"var(--ink-2)"}}>${parse(r.sort).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"})}</span>
+          <span style=${{fontSize:13.5}}>${r.title}</span>
+          <span className="lr-meta" style=${{fontSize:12,color:"var(--muted)"}}>${r.meta}</span>
+          <span style=${{fontSize:11.5,borderRadius:999,padding:"3px 10px",justifySelf:"start",background:r.status==="Published"?"var(--bg)":"var(--ink)",color:r.status==="Published"?"var(--muted)":"var(--surface)"}}>${r.status}</span>
+        </div>`)}
+      </div>`}
+    </div>
+
+    <aside className=${"side"+(dropTarget==="side"?" hot":"")} style=${{width:sidebar?294:50}} onDragOver=${p.allowDrop("side")} onDragLeave=${p.leaveDrop("side")} onDrop=${dropOnSidebar}>
+      ${sidebar?html`<div style=${{padding:"20px 20px 36px"}}>
+        <div style=${{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+          <h3 style=${{fontSize:15,fontWeight:600,margin:0,letterSpacing:"-.018em"}}>Unscheduled</h3>
+          <button type="button" className="nav-btn" style=${{marginLeft:"auto",width:26,height:26,borderRadius:8,fontSize:12}} aria-label="Collapse" onClick=${()=>setSidebar(false)}>→</button>
+        </div>
+        <p style=${{fontSize:12,color:"var(--muted)",margin:"0 0 18px"}}>Drag onto a date to schedule it. Drag back here to unschedule.</p>
+        <div className="kicker" style=${{marginBottom:10}}>Deliverables</div>
+        <div style=${{display:"flex",flexDirection:"column",gap:7,marginBottom:22}}>
+          ${unsD.map(d=>html`<div key=${d.id} className="uns" draggable="true" onDragStart=${p.startDrag("deliverable",d.id)} onDragEnd=${p.endDrag} onClick=${()=>openCollab(d.collabId)}>
+            <span style=${{display:"block",fontSize:12.5}}>${brandOf(d.collabId)} — ${d.name}</span>
+            <span style=${{display:"block",fontSize:11,color:"var(--muted)"}}>${d.platform} · ${d.type}</span></div>`)}
+          ${unsD.length===0&&html`<span style=${{fontSize:12,color:"var(--muted)"}}>All scheduled.</span>`}
+        </div>
+        <div className="kicker" style=${{marginBottom:10}}>Content ideas</div>
+        <div style=${{display:"flex",flexDirection:"column",gap:7,marginBottom:10}}>
+          ${unsI.map(x=>html`<div key=${x.id} className="uns-idea" draggable="true" onDragStart=${p.startDrag("idea",x.id)} onDragEnd=${p.endDrag}>
+            <div style=${{display:"flex",alignItems:"flex-start",gap:6}}>
+              <input id=${"it-"+x.id} aria-label="Idea title" className="quiet quiet-w" value=${x.title} onChange=${val(v=>api.patch("ideas",x.id,{title:v}))} style=${{flex:1,minWidth:0,fontSize:12.5,marginLeft:-3,padding:"1px 3px"}}/>
+              <button type="button" className="x" style=${{width:18,height:18,fontSize:11}} aria-label="Delete idea" onClick=${()=>askDelete("Delete this idea?","“"+x.title+"” will be removed.",()=>api.remove([["ideas",x.id]]))}>✕</button>
+            </div>
+            <input id=${"ih-"+x.id} aria-label="Hook" placeholder="Hook" className="quiet quiet-w" value=${x.hook} onChange=${val(v=>api.patch("ideas",x.id,{hook:v}))} style=${{display:"block",width:"100%",fontSize:11,color:"var(--muted)",marginLeft:-3,padding:"1px 3px"}}/>
+          </div>`)}
+        </div>
+        <button type="button" className="add-row" style=${{fontSize:12.5,gap:8}} onClick=${()=>api.add("ideas",{id:uid("i"),title:"New idea",hook:"",concept:"",platform:"Instagram",type:"Reel",collabId:"",scheduledDate:""})}>
+          <span className="add-dot" style=${{width:18,height:18,fontSize:11}}>+</span><span>Add idea</span></button>
+      </div>`:html`<button type="button" onClick=${()=>setSidebar(true)} style=${{width:"100%",height:"100%",minHeight:220,border:0,background:"transparent",writingMode:"vertical-rl",fontSize:11,letterSpacing:".1em",textTransform:"uppercase",color:"var(--muted)"}}>Unscheduled · ${unsD.length+unsI.length}</button>`}
+    </aside>
+  </div>`;
+}
+
+/* ---------- Contacts ---------- */
+function Contacts(p){
+  const {st,api,cFilter,setCFilter,cSort,setCSort,setOpen,setTab,askDelete,newCollab}=p;
+  const {contacts,collabs,deliverables}=st;
+  const rows=contacts.filter(c=>cFilter==="All statuses"||c.status===cFilter).slice().sort((a,b)=>{
+    if(cSort==="Brand A–Z")return (a.brand||"").localeCompare(b.brand||"");
+    if(cSort==="Last contact")return (b.lastContactDate||"").localeCompare(a.lastContactDate||"");
+    return (a.followUpDate||"9999").localeCompare(b.followUpDate||"9999");
+  });
+  const addContact=()=>{setCFilter("All statuses");setCSort("Follow-up date");api.add("contacts",{id:uid("c"),brand:"New brand",person:"",email:"",website:"",social:"",folder:"",lastContactDate:"",followUpDate:TODAY,status:"No response"})};
+
+  return html`<div className="page" style=${{paddingTop:24}}>
+    <div style=${{display:"flex",alignItems:"center",gap:12,marginBottom:14,flexWrap:"wrap"}}>
+      <h2 style=${{fontSize:24,fontWeight:700,margin:0,letterSpacing:"-.035em"}}>Contacts</h2>
+      <span className="num" style=${{fontSize:12.5,color:"var(--muted)"}}>${rows.length} of ${contacts.length}</span>
+      <div style=${{marginLeft:"auto",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <select id="c-filter" aria-label="Filter by relationship" className="sel-box" value=${cFilter} onChange=${val(setCFilter)}><${Options} list=${["All statuses"].concat(CSTATUS)}/></select>
+        <select id="c-sort" aria-label="Sort" className="sel-box" value=${cSort} onChange=${val(setCSort)}><${Options} list=${["Follow-up date","Brand A–Z","Last contact"]}/></select>
+        <button type="button" className="btn-dark" style=${{padding:"6px 14px",fontSize:12.5,borderRadius:9}} onClick=${addContact}>Add contact</button>
+      </div>
+    </div>
+    <div className="ctable">
+      <div className="crow head">${["Brand","Contact","Email","Relationship","History","Last contacted","Contact again",""].map((h,i)=>html`<span key=${i} className="kicker">${h}</span>`)}</div>
+      ${rows.length===0&&html`<p style=${{color:"var(--muted)",padding:"16px 8px",margin:0}}>No contacts with this status.</p>`}
+      ${rows.map(c=>{
+        const due=c.followUpDate&&c.followUpDate<=TODAY;
+        const mine=collabs.filter(x=>x.contactId===c.id);
+        const bold=c.status==="Follow up"||c.status==="No response";
+        return html`<div key=${c.id} className="crow">
+          <div style=${{minWidth:0}}>
+            <input id=${"cb-"+c.id} aria-label="Brand" className="cin" value=${c.brand} onChange=${val(v=>api.patch("contacts",c.id,{brand:v}))} style=${{display:"block",fontSize:13.5,fontWeight:500}}/>
+            <input id=${"cl-"+c.id} aria-label="Social handle" placeholder="@handle" className="cin" value=${c.social||""} onChange=${val(v=>api.patch("contacts",c.id,{social:v}))} style=${{display:"block",fontSize:11,color:"var(--muted)",padding:"0 5px"}}/>
+          </div>
+          <input id=${"cp-"+c.id} aria-label="Contact person" placeholder="Name" className="cin" value=${c.person} onChange=${val(v=>api.patch("contacts",c.id,{person:v}))} style=${{fontSize:12.5}}/>
+          <input id=${"ce-"+c.id} aria-label="Email" placeholder="email@brand.com" className="cin" value=${c.email} onChange=${val(v=>api.patch("contacts",c.id,{email:v}))} style=${{fontSize:12,color:"var(--ink-2)"}}/>
+          <select id=${"cs-"+c.id} aria-label="Relationship" className="qsel" value=${c.status} onChange=${val(v=>api.patch("contacts",c.id,{status:v},0))}
+            style=${{color:c.status==="Hard no"?"var(--faint)":bold?"var(--ink)":"var(--ink-2)",fontWeight:bold?500:400}}><${Options} list=${CSTATUS}/></select>
+          <button type="button" className="num" onClick=${()=>{if(mine.length){setTab("dash");setOpen(mine[0].id)}else newCollab("Potential",c)}}
+            style=${{justifySelf:"start",background:"transparent",border:0,padding:0,fontSize:12,color:"var(--ink-2)",textDecoration:"underline",textUnderlineOffset:2}}>${mine.length===0?"Start collab":mine.length===1?"1 collab":mine.length+" collabs"}</button>
+          <input id=${"clc-"+c.id} type="date" aria-label="Last contacted" className="date-in num" value=${c.lastContactDate||""} onChange=${val(v=>api.patch("contacts",c.id,{lastContactDate:v},0))}/>
+          <span className=${due?"due":""} style=${{display:"block"}}>
+            <input id=${"cf-"+c.id} type="date" aria-label="Contact again" className="date-in num" value=${c.followUpDate||""} onChange=${val(v=>api.patch("contacts",c.id,{followUpDate:v},0))}/>
+          </span>
+          <button type="button" className="x" aria-label=${"Delete "+c.brand} onClick=${()=>askDelete("Delete "+c.brand+"?",mine.length?"This contact has "+mine.length+(mine.length===1?" collaboration":" collaborations")+". They will be deleted too.":"The contact will be removed.",()=>{
+            const ids=mine.map(x=>x.id);
+            api.remove([["contacts",c.id],...ids.map(id=>["collabs",id]),...deliverables.filter(d=>ids.includes(d.collabId)).map(d=>["deliverables",d.id])]);
+          })}>✕</button>
+        </div>`;
+      })}
+    </div>
+  </div>`;
+}
+
+/* ---------- Collaboration panel ---------- */
+function CollabPanel(p){
+  const {collab:oc,st,api,dkk,onClose,askDelete}=p;
+  const contact=st.contacts.find(c=>c.id===oc.contactId)||{};
+  const pc=(key,delay)=>val(v=>api.patch("collabs",oc.id,{[key]:v},delay));
+  const dels=st.deliverables.filter(d=>d.collabId===oc.id);
+  const folderHref=oc.folder?(/^https?:\/\//.test(oc.folder)?oc.folder:"https://"+oc.folder.trim()):"";
+  const siblings=st.collabs.filter(x=>x.contactId===contact.id).length;
+  const fields=[
+    {k:"person",label:"Contact person",value:contact.person,on:val(v=>contact.id&&api.patch("contacts",contact.id,{person:v}))},
+    {k:"email",label:"Email",value:contact.email,on:val(v=>contact.id&&api.patch("contacts",contact.id,{email:v}))},
+    {k:"startDate",label:"Start date",value:oc.startDate,type:"date",on:pc("startDate",0)},
+    {k:"endDate",label:"End date",value:oc.endDate,type:"date",on:pc("endDate",0)},
+    {k:"folder",label:"Folder link",value:oc.folder,on:pc("folder"),href:folderHref},
+    {k:"contract",label:"Contract",value:oc.contract,on:pc("contract")},
+    {k:"invoice",label:"Invoice information",value:oc.invoice,on:pc("invoice")}
+  ];
+  const cutLabel=oc.owner==="Steph"?"Steph's cut · 10%":"Owner";
+  const tall={fontSize:21,fontWeight:600};
+
+  return html`<div className="scrim panel-wrap" onClick=${onClose}>
+    <div className="panel" onClick=${stop} role="dialog" aria-modal="true" aria-label=${oc.brand}>
+      <div className="panel-head">
+        <input id="m-brand" aria-label="Brand" className="quiet" value=${oc.brand} onChange=${val(v=>{
+          api.patch("collabs",oc.id,{brand:v});
+          if(contact.id&&siblings===1)api.patch("contacts",contact.id,{brand:v});
+        })} style=${{flex:1,minWidth:0,fontSize:22,fontWeight:700,letterSpacing:"-.035em",borderRadius:8,padding:"2px 4px"}}/>
+        <button type="button" className="nav-btn" style=${{width:28,height:28,borderRadius:8,fontSize:12}} aria-label="Close" onClick=${onClose}>✕</button>
+      </div>
+      <div className="panel-body">
+        <div style=${{display:"flex",alignItems:"center",gap:8,marginBottom:18,flexWrap:"wrap"}}>
+          <select id="m-stage" aria-label="Stage" value=${oc.stage} onChange=${pc("stage",0)} style=${{border:0,borderRadius:8,background:"var(--ink)",color:"var(--surface)",padding:"7px 12px",fontSize:12.5,fontWeight:500}}><${Options} list=${STAGES}/></select>
+          <select id="m-kanban" aria-label="Board column" className="psel" value=${oc.kanban} onChange=${pc("kanban",0)}><${Options} list=${KAN}/></select>
+          <select id="m-fin" aria-label="Financial status" className="psel" value=${oc.finStatus} onChange=${pc("finStatus",0)}><${Options} list=${FIN}/></select>
+          <select id="m-owner" aria-label="Owner" className="psel" value=${oc.owner} onChange=${pc("owner",0)}><${Options} list=${OWNERS}/></select>
+          <select id="m-contact" aria-label="Brand contact" className="psel" value=${oc.contactId} onChange=${val(v=>api.patch("collabs",oc.id,{contactId:v},0))} title="Linked contact">
+            ${st.contacts.slice().sort((a,b)=>(a.brand||"").localeCompare(b.brand||"")).map(c=>html`<option key=${c.id} value=${c.id}>Contact: ${c.brand}${c.person?" · "+c.person:""}</option>`)}
+          </select>
+          <button type="button" className="x" style=${{marginLeft:"auto",width:"auto",padding:"0 8px",fontSize:12}} onClick=${()=>p.deleteCollab(oc)}>Delete</button>
+        </div>
+
+        <div style=${{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:20}}>
+          <div className="stat">
+            <span className="kicker" style=${{display:"block",marginBottom:7}}>Price</span>
+            <span style=${{display:"flex",alignItems:"baseline",gap:6}}>
+              <input id="m-price" type="number" aria-label="Price" className="num" value=${oc.price} onChange=${val(v=>api.patch("collabs",oc.id,{price:Number(v)||0}))} style=${{...tall,width:100,background:"transparent",border:0,padding:0}}/>
+              <select id="m-cur" aria-label="Currency" value=${oc.currency} onChange=${pc("currency",0)} style=${{border:0,background:"transparent",fontSize:12,color:"var(--ink-2)"}}><${Options} list=${CURRENCIES}/></select>
+            </span>
+          </div>
+          <div className="stat"><span className="kicker" style=${{display:"block",marginBottom:7}}>In DKK</span><span className="num" style=${tall}>${kr(dkk(oc))}</span></div>
+          <div className="stat"><span className="kicker" style=${{display:"block",marginBottom:7}}>${cutLabel}</span><span className="num" style=${tall}>${oc.owner==="Steph"?kr(dkk(oc)*STEPH_CUT):"Aleksandra"}</span></div>
+        </div>
+
+        <div className="fgrid">
+          ${fields.map(f=>html`<label key=${f.k} style=${{display:"block",marginBottom:14,minWidth:0}}>
+            <span style=${{display:"flex",alignItems:"baseline",gap:8,marginBottom:5}}>
+              <span className="kicker">${f.label}</span>
+              ${f.href&&html`<a href=${f.href} target="_blank" rel="noopener" onClick=${stop} style=${{fontSize:11}}>Open</a>`}
+            </span>
+            <input id=${"m-"+f.k} className="field" type=${f.type||"text"} value=${f.value||""} onChange=${f.on}/>
+          </label>`)}
+        </div>
+
+        <div style=${{margin:"6px 0 22px"}}>
+          <label htmlFor="m-pitch" className="kicker" style=${{display:"block",marginBottom:6}}>Content pitch</label>
+          <textarea id="m-pitch" className="field" rows="3" value=${oc.pitch} onChange=${pc("pitch")} style=${{borderRadius:11,padding:"10px 12px",lineHeight:1.55,resize:"vertical"}}></textarea>
+          <label htmlFor="m-notes" className="kicker" style=${{display:"block",margin:"14px 0 6px"}}>Notes</label>
+          <textarea id="m-notes" className="field" rows="5" value=${oc.notes} onChange=${pc("notes")} style=${{borderRadius:11,padding:"11px 13px",lineHeight:1.6,resize:"vertical"}}></textarea>
+        </div>
+
+        <div>
+          <div style=${{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <h4 style=${{fontSize:16,fontWeight:600,margin:0,letterSpacing:"-.022em"}}>Deliverables</h4>
+            <span style=${{fontSize:12,color:"var(--muted)"}}>${dels.length} total · ${dels.filter(d=>d.publishDate).length} scheduled</span>
+            <button type="button" className="btn-dark" style=${{marginLeft:"auto",borderRadius:8,padding:"6px 14px",fontSize:12.5}}
+              onClick=${()=>api.add("deliverables",{id:uid("d"),collabId:oc.id,name:"New deliverable",platform:"Instagram",type:"Reel",status:"Idea",shootDate:"",editDeadline:"",publishDate:"",notes:"",link:""})}>Add</button>
+          </div>
+          <div style=${{display:"flex",flexDirection:"column",gap:10}}>
+            ${dels.length===0&&html`<div className="empty-drop">No deliverables yet</div>`}
+            ${dels.map(d=>html`<div key=${d.id} className="del">
+              <div style=${{display:"flex",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+                <input id=${"dn-"+d.id} aria-label="Deliverable name" className="quiet quiet-w" value=${d.name} onChange=${val(v=>api.patch("deliverables",d.id,{name:v}))} style=${{flex:"1 1 160px",minWidth:0,fontSize:13.5,fontWeight:500,padding:"2px 4px"}}/>
+                <select id=${"dp-"+d.id} aria-label="Platform" value=${d.platform} onChange=${val(v=>api.patch("deliverables",d.id,{platform:v},0))} style=${{border:0,borderRadius:8,background:"var(--surface)",padding:"4px 9px",fontSize:11.5}}><${Options} list=${PLATFORMS}/></select>
+                <select id=${"ds-"+d.id} aria-label="Status" value=${d.status} onChange=${val(v=>api.patch("deliverables",d.id,{status:v},0))}
+                  style=${{border:0,borderRadius:8,padding:"4px 10px",fontSize:11.5,background:d.status==="Published"?"var(--surface)":"var(--ink)",color:d.status==="Published"?"var(--muted)":"var(--surface)"}}><${Options} list=${DSTATUS}/></select>
+                <button type="button" className="x" style=${{color:"var(--faint)"}} aria-label="Delete deliverable" onClick=${()=>askDelete("Delete this deliverable?","“"+d.name+"” will be removed from "+oc.brand+" and from the calendar.",()=>api.remove([["deliverables",d.id]]))}>✕</button>
+              </div>
+              <div style=${{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10}}>
+                ${[["shootDate","Shoot"],["editDeadline","Edit by"],["publishDate","Publish"]].map(([k,l])=>html`<label key=${k} style=${{display:"block",minWidth:0}}>
+                  <span style=${{display:"block",fontSize:10,fontWeight:500,letterSpacing:".08em",textTransform:"uppercase",color:"var(--muted)",marginBottom:4}}>${l}</span>
+                  <input id=${"d"+k+"-"+d.id} type="date" className="del-date num" value=${d[k]||""} onChange=${val(v=>api.patch("deliverables",d.id,k==="publishDate"?{publishDate:v,status:v&&d.status==="Idea"?"Scheduled":d.status}:{[k]:v},0))}/>
+                </label>`)}
+              </div>
+            </div>`)}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(html`<${App}/>`);
+})();
+</script>
+</body>
+</html>
