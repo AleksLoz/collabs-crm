@@ -474,7 +474,7 @@ function App(){
   const deleteCollab=c=>{
     const dels=deliverables.filter(d=>d.collabId===c.id);
     askDelete("Delete "+c.brand+"?","The collaboration and its "+dels.length+(dels.length===1?" deliverable go":" deliverables go")+" with it. The contact stays in Contacts.",()=>{
-      api.remove([["collabs",c.id],...dels.map(d=>["deliverables",d.id])]);
+      api.remove([["collabs",c.id],...dels.flatMap(d=>[["deliverables",d.id],["tasks","cd-"+d.id]])]);
       if(open===c.id)setOpen(null);
     });
   };
@@ -487,11 +487,29 @@ function App(){
   const setStage=(c,stage)=>{
     api.patch("collabs",c.id,{stage},0);
     if(stage==="Send invoice"){
-      const title="Send "+c.brand+" invoice";
-      const already=tasks.some(x=>x.group==="Finance"&&x.collabId===c.id&&x.title===title);
-      if(!already)api.add("tasks",{id:uid("t"),group:"Finance",title,meta:kr(dkk(c))+" · ready to invoice",done:false,collabId:c.id,createdAt:0});
+      const taskId="inv-"+c.id;
+      if(!tasks.some(x=>x.id===taskId))api.add("tasks",{id:taskId,group:"Finance",title:"Send "+c.brand+" invoice",meta:kr(dkk(c))+" · ready to invoice",done:false,collabId:c.id,createdAt:0});
     }
   };
+
+  // Every non-published deliverable gets a matching Content to-do, kept in
+  // sync as it changes and marked done the moment it publishes. Deterministic
+  // "cd-<id>" ids mean two clients racing to sync converge on the same row
+  // instead of creating duplicates.
+  useEffect(()=>{
+    deliverables.forEach(d=>{
+      const taskId="cd-"+d.id;
+      const existing=tasks.find(x=>x.id===taskId);
+      const title=brandOf(d.collabId)+" — "+d.name;
+      const meta=d.platform+" · "+d.type+(d.publishDate?" · publishes "+fmtDate(d.publishDate):"");
+      const shouldBeDone=d.status==="Published";
+      if(!existing){
+        if(!shouldBeDone)api.add("tasks",{id:taskId,group:"Content",title,meta,done:false,collabId:d.collabId,createdAt:0});
+      }else if(existing.done!==shouldBeDone||existing.title!==title||existing.meta!==meta){
+        api.patch("tasks",taskId,{done:shouldBeDone,title,meta},0);
+      }
+    });
+  },[deliverables]);
 
   const common={st,api,dkk,brandOf,collabDate,startDrag,endDrag,allowDrop,leaveDrop,dropTarget,setDropTarget,drag,askDelete,setOpen,setTab,deleteCollab,newCollab,setStage};
 
@@ -944,7 +962,8 @@ function Contacts(p){
           </span>
           <button type="button" className="x" aria-label=${"Delete "+c.brand} onClick=${()=>askDelete("Delete "+c.brand+"?",mine.length?"This contact has "+mine.length+(mine.length===1?" collaboration":" collaborations")+". They will be deleted too.":"The contact will be removed.",()=>{
             const ids=mine.map(x=>x.id);
-            api.remove([["contacts",c.id],...ids.map(id=>["collabs",id]),...deliverables.filter(d=>ids.includes(d.collabId)).map(d=>["deliverables",d.id])]);
+            const dels=deliverables.filter(d=>ids.includes(d.collabId));
+            api.remove([["contacts",c.id],...ids.map(id=>["collabs",id]),...dels.flatMap(d=>[["deliverables",d.id],["tasks","cd-"+d.id]])]);
           })}>✕</button>
         </div>`;
       })}
@@ -1037,7 +1056,7 @@ function CollabPanel(p){
                 <select id=${"dp-"+d.id} aria-label="Platform" value=${d.platform} onChange=${val(v=>api.patch("deliverables",d.id,{platform:v},0))} style=${{border:0,borderRadius:8,background:"var(--surface)",padding:"4px 9px",fontSize:11.5}}><${Options} list=${PLATFORMS}/></select>
                 <select id=${"ds-"+d.id} aria-label="Status" value=${d.status} onChange=${val(v=>api.patch("deliverables",d.id,{status:v},0))}
                   style=${{border:0,borderRadius:8,padding:"4px 10px",fontSize:11.5,background:d.status==="Published"?"var(--surface)":"var(--ink)",color:d.status==="Published"?"var(--muted)":"var(--surface)"}}><${Options} list=${DSTATUS}/></select>
-                <button type="button" className="x" style=${{color:"var(--faint)"}} aria-label="Delete deliverable" onClick=${()=>askDelete("Delete this deliverable?","“"+d.name+"” will be removed from "+oc.brand+" and from the calendar.",()=>api.remove([["deliverables",d.id]]))}>✕</button>
+                <button type="button" className="x" style=${{color:"var(--faint)"}} aria-label="Delete deliverable" onClick=${()=>askDelete("Delete this deliverable?","“"+d.name+"” will be removed from "+oc.brand+" and from the calendar.",()=>api.remove([["deliverables",d.id],["tasks","cd-"+d.id]]))}>✕</button>
               </div>
               <div style=${{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10}}>
                 ${[["shootDate","Shoot"],["editDeadline","Edit by"],["publishDate","Publish"]].map(([k,l])=>html`<label key=${k} style=${{display:"block",minWidth:0}}>
