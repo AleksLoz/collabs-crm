@@ -982,14 +982,13 @@ function CollabPanel(p){
   const fields=[
     {k:"person",label:"Contact person",value:contact.person,on:val(v=>contact.id&&api.patch("contacts",contact.id,{person:v}))},
     {k:"email",label:"Email",value:contact.email,on:val(v=>contact.id&&api.patch("contacts",contact.id,{email:v}))},
-    {k:"startDate",label:"Start date",value:oc.startDate,type:"date",on:pc("startDate",0)},
-    {k:"endDate",label:"End date",value:oc.endDate,type:"date",on:pc("endDate",0)},
+    {k:"followUpDate",label:"Follow-up date",value:contact.followUpDate,type:"date",on:val(v=>contact.id&&api.patch("contacts",contact.id,{followUpDate:v},0))},
     {k:"folder",label:"Folder link",value:oc.folder,on:pc("folder"),href:folderHref},
     {k:"contract",label:"Contract",value:oc.contract,on:pc("contract")},
     {k:"invoice",label:"Invoice information",value:oc.invoice,on:pc("invoice")}
   ];
   const cutLabel=oc.owner==="Steph"?"Steph's cut · 10%":"Owner";
-  const tall={fontSize:21,fontWeight:600};
+  const tall={fontSize:18,fontWeight:600};
 
   return html`<div className="scrim panel-wrap" onClick=${onClose}>
     <div className="panel" onClick=${stop} role="dialog" aria-modal="true" aria-label=${oc.brand}>
@@ -1000,8 +999,8 @@ function CollabPanel(p){
         })} style=${{flex:1,minWidth:0,fontSize:22,fontWeight:700,letterSpacing:"-.035em",borderRadius:8,padding:"2px 4px"}}/>
         <button type="button" className="nav-btn" style=${{width:28,height:28,borderRadius:8,fontSize:12}} aria-label="Close" onClick=${onClose}>✕</button>
       </div>
-      <div className="panel-body">
-        <div style=${{display:"flex",alignItems:"center",gap:8,marginBottom:18,flexWrap:"wrap"}}>
+      <div className="panel-body" style=${{paddingTop:14,paddingBottom:40}}>
+        <div style=${{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
           <select id="m-stage" aria-label="Stage" value=${oc.stage} onChange=${val(v=>p.setStage(oc,v))} style=${{border:0,borderRadius:8,background:"var(--ink)",color:"var(--surface)",padding:"7px 12px",fontSize:12.5,fontWeight:500}}><${Options} list=${STAGES}/></select>
           <select id="m-kanban" aria-label="Board column" className="psel" value=${oc.kanban} onChange=${pc("kanban",0)}><${Options} list=${KAN}/></select>
           <select id="m-fin" aria-label="Financial status" className="psel" value=${oc.finStatus} onChange=${pc("finStatus",0)}><${Options} list=${FIN}/></select>
@@ -1012,21 +1011,21 @@ function CollabPanel(p){
           <button type="button" className="x" style=${{marginLeft:"auto",width:"auto",padding:"0 8px",fontSize:12}} onClick=${()=>p.deleteCollab(oc)}>Delete</button>
         </div>
 
-        <div style=${{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:20}}>
-          <div className="stat">
-            <span className="kicker" style=${{display:"block",marginBottom:7}}>Price</span>
+        <div style=${{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8,marginBottom:14}}>
+          <div className="stat" style=${{padding:"10px 13px"}}>
+            <span className="kicker" style=${{display:"block",marginBottom:5}}>Price</span>
             <span style=${{display:"flex",alignItems:"baseline",gap:6}}>
               <input id="m-price" type="number" aria-label="Price" className="num" value=${oc.price} onChange=${val(v=>api.patch("collabs",oc.id,{price:Number(v)||0}))} style=${{...tall,width:100,background:"transparent",border:0,padding:0}}/>
               <select id="m-cur" aria-label="Currency" value=${oc.currency} onChange=${pc("currency",0)} style=${{border:0,background:"transparent",fontSize:12,color:"var(--ink-2)"}}><${Options} list=${CURRENCIES}/></select>
             </span>
           </div>
-          <div className="stat"><span className="kicker" style=${{display:"block",marginBottom:7}}>In DKK</span><span className="num" style=${tall}>${kr(dkk(oc))}</span></div>
-          <div className="stat"><span className="kicker" style=${{display:"block",marginBottom:7}}>${cutLabel}</span><span className="num" style=${tall}>${oc.owner==="Steph"?kr(dkk(oc)*STEPH_CUT):"Aleksandra"}</span></div>
+          <div className="stat" style=${{padding:"10px 13px"}}><span className="kicker" style=${{display:"block",marginBottom:5}}>In DKK</span><span className="num" style=${tall}>${kr(dkk(oc))}</span></div>
+          <div className="stat" style=${{padding:"10px 13px"}}><span className="kicker" style=${{display:"block",marginBottom:5}}>${cutLabel}</span><span className="num" style=${tall}>${oc.owner==="Steph"?kr(dkk(oc)*STEPH_CUT):"Aleksandra"}</span></div>
         </div>
 
         <div className="fgrid">
-          ${fields.map(f=>html`<label key=${f.k} style=${{display:"block",marginBottom:14,minWidth:0}}>
-            <span style=${{display:"flex",alignItems:"baseline",gap:8,marginBottom:5}}>
+          ${fields.map(f=>html`<label key=${f.k} style=${{display:"block",marginBottom:10,minWidth:0}}>
+            <span style=${{display:"flex",alignItems:"baseline",gap:8,marginBottom:3}}>
               <span className="kicker">${f.label}</span>
               ${f.href&&html`<a href=${f.href} target="_blank" rel="noopener" onClick=${stop} style=${{fontSize:11}}>Open</a>`}
             </span>
@@ -1034,11 +1033,11 @@ function CollabPanel(p){
           </label>`)}
         </div>
 
-        <div style=${{margin:"6px 0 22px"}}>
-          <label htmlFor="m-pitch" className="kicker" style=${{display:"block",marginBottom:6}}>Content pitch</label>
-          <textarea id="m-pitch" className="field" rows="3" value=${oc.pitch} onChange=${pc("pitch")} style=${{borderRadius:11,padding:"10px 12px",lineHeight:1.55,resize:"vertical"}}></textarea>
-          <label htmlFor="m-notes" className="kicker" style=${{display:"block",margin:"14px 0 6px"}}>Notes</label>
-          <textarea id="m-notes" className="field" rows="5" value=${oc.notes} onChange=${pc("notes")} style=${{borderRadius:11,padding:"11px 13px",lineHeight:1.6,resize:"vertical"}}></textarea>
+        <div style=${{margin:"4px 0 16px"}}>
+          <label htmlFor="m-pitch" className="kicker" style=${{display:"block",marginBottom:5}}>Content pitch</label>
+          <textarea id="m-pitch" className="field" rows="2" value=${oc.pitch} onChange=${pc("pitch")} style=${{borderRadius:11,padding:"9px 11px",lineHeight:1.5,resize:"vertical"}}></textarea>
+          <label htmlFor="m-notes" className="kicker" style=${{display:"block",margin:"10px 0 5px"}}>Notes</label>
+          <textarea id="m-notes" className="field" rows="3" value=${oc.notes} onChange=${pc("notes")} style=${{borderRadius:11,padding:"9px 11px",lineHeight:1.55,resize:"vertical"}}></textarea>
         </div>
 
         <div>
