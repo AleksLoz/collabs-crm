@@ -244,7 +244,9 @@ function useAuth(){
   useEffect(()=>{
     if(!SUPABASE_READY){setState({loading:false,session:null});return}
     let alive=true;
-    supabase.auth.getSession().then(({data})=>{if(alive)setState({loading:false,session:data.session})});
+    supabase.auth.getSession()
+      .then(({data})=>{if(alive)setState({loading:false,session:data.session})})
+      .catch(err=>{console.warn("getSession failed",err);if(alive)setState({loading:false,session:null})});
     const {data:sub}=supabase.auth.onAuthStateChange((_event,session)=>{if(alive)setState({loading:false,session})});
     return()=>{alive=false;sub.subscription.unsubscribe()};
   },[]);
