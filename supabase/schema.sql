@@ -14,6 +14,7 @@ create table if not exists contacts (
   "lastContactDate" text default '',
   "followUpDate" text default '',
   status text default '',
+  notes text default '',
   "createdAt" bigint default 0
 );
 

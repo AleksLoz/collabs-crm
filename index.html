@@ -120,7 +120,7 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.03em;line-height:1.1;margin:0
 
 /* contacts */
 .ctable{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:4px 20px 14px;overflow-x:auto}
-.crow{display:grid;grid-template-columns:minmax(124px,1fr) minmax(110px,.8fr) minmax(150px,.9fr) 118px 78px 118px 118px 24px;gap:10px;padding:11px 8px;border-bottom:1px solid var(--line-2);border-radius:9px;align-items:center;min-width:900px}
+.crow{display:grid;grid-template-columns:minmax(124px,1fr) minmax(110px,.8fr) minmax(150px,.9fr) 118px 78px 118px 118px 52px;gap:10px;padding:11px 8px;border-bottom:1px solid var(--line-2);border-radius:9px;align-items:center;min-width:920px}
 .crow.head{padding:14px 8px 10px;border-bottom-color:var(--line);border-radius:0}
 .crow:not(.head):hover{background:var(--cell)}
 .cin{width:100%;min-width:0;background:transparent;border:1px solid transparent;border-radius:7px;padding:3px 5px;margin-left:-5px;text-overflow:ellipsis}
@@ -416,6 +416,7 @@ function App(){
   const [showFinance,setShowFinance]=useState(()=>lsGet("collabs.fin","1")==="1");
   const [showToday,setShowToday]=useState(()=>lsGet("collabs.todo","1")==="1");
   const [open,setOpen]=useState(null);
+  const [openContact,setOpenContact]=useState(null);
   const [confirm,setConfirm]=useState(null);
   const [quick,setQuick]=useState(null);
   const [quickTitle,setQuickTitle]=useState("");
@@ -434,14 +435,14 @@ function App(){
   useEffect(()=>lsSet("collabs.fin",showFinance?"1":"0"),[showFinance]);
   useEffect(()=>lsSet("collabs.todo",showToday?"1":"0"),[showToday]);
   useEffect(()=>{
-    const onKey=e=>{if(e.key==="Escape"){if(confirm)setConfirm(null);else if(quick)setQuick(null);else if(login)setLogin(false);else if(open)setOpen(null)}};
+    const onKey=e=>{if(e.key==="Escape"){if(confirm)setConfirm(null);else if(quick)setQuick(null);else if(login)setLogin(false);else if(openContact)setOpenContact(null);else if(open)setOpen(null)}};
     window.addEventListener("keydown",onKey);return()=>window.removeEventListener("keydown",onKey);
-  },[confirm,quick,login,open]);
+  },[confirm,quick,login,open,openContact]);
   useEffect(()=>{
-    const anyOpen=!!(confirm||quick||login||open);
+    const anyOpen=!!(confirm||quick||login||open||openContact);
     document.body.style.overflow=anyOpen?"hidden":"";
     return()=>{document.body.style.overflow=""};
-  },[confirm,quick,login,open]);
+  },[confirm,quick,login,open,openContact]);
   // Every non-published deliverable gets a matching Content to-do, kept in
   // sync as it changes and marked done the moment it publishes. Deterministic
   // "cd-<id>" ids mean two clients racing to sync converge on the same row
@@ -523,7 +524,7 @@ function App(){
     maybeInvoiceTask({...c,kanban});
   };
 
-  const common={st,api,dkk,brandOf,collabDate,startDrag,endDrag,allowDrop,leaveDrop,dropTarget,setDropTarget,drag,askDelete,setOpen,setTab,deleteCollab,newCollab,setStage,setKanban};
+  const common={st,api,dkk,brandOf,collabDate,startDrag,endDrag,allowDrop,leaveDrop,dropTarget,setDropTarget,drag,askDelete,setOpen,setOpenContact,setTab,deleteCollab,newCollab,setStage,setKanban};
 
   const sync = st.mode==="loading"?"Loading…":st.mode==="local"?"Example data · not saved":st.mode==="offline"?"Read-only":(st.saving?"Saving…":"Saved");
 
@@ -559,6 +560,7 @@ function App(){
     ${tab==="contacts"&&html`<${Contacts} ...${common} cFilter=${cFilter} setCFilter=${setCFilter} cSort=${cSort} setCSort=${setCSort}/>`}
 
     ${open&&collabs.find(c=>c.id===open)&&html`<${CollabPanel} ...${common} collab=${collabs.find(c=>c.id===open)} onClose=${()=>setOpen(null)}/>`}
+    ${openContact&&contacts.find(c=>c.id===openContact)&&html`<${ContactPanel} ...${common} contact=${contacts.find(c=>c.id===openContact)} onClose=${()=>setOpenContact(null)}/>`}
 
     ${quick&&html`<div className="scrim center" onClick=${()=>setQuick(null)}>
       <div className="dialog" onClick=${stop} role="dialog" aria-modal="true" aria-labelledby="qa-t">
@@ -931,7 +933,7 @@ function Calendar(p){
 
 /* ---------- Contacts ---------- */
 function Contacts(p){
-  const {st,api,cFilter,setCFilter,cSort,setCSort,setOpen,setTab,askDelete,newCollab}=p;
+  const {st,api,cFilter,setCFilter,cSort,setCSort,setOpen,setOpenContact,setTab,askDelete,newCollab}=p;
   const {contacts,collabs,deliverables}=st;
   const rows=contacts.filter(c=>cFilter==="All statuses"||c.status===cFilter).slice().sort((a,b)=>{
     if(cSort==="Brand A–Z")return (a.brand||"").localeCompare(b.brand||"");
@@ -972,13 +974,82 @@ function Contacts(p){
           <span className=${due?"due":""} style=${{display:"block"}}>
             <input id=${"cf-"+c.id} type="date" aria-label="Contact again" className="date-in num" value=${c.followUpDate||""} onChange=${val(v=>api.patch("contacts",c.id,{followUpDate:v},0))}/>
           </span>
-          <button type="button" className="x" aria-label=${"Delete "+c.brand} onClick=${()=>askDelete("Delete "+c.brand+"?",mine.length?"This contact has "+mine.length+(mine.length===1?" collaboration":" collaborations")+". They will be deleted too.":"The contact will be removed.",()=>{
-            const ids=mine.map(x=>x.id);
-            const dels=deliverables.filter(d=>ids.includes(d.collabId));
-            api.remove([["contacts",c.id],...ids.map(id=>["collabs",id]),...dels.flatMap(d=>[["deliverables",d.id],["tasks","cd-"+d.id]])]);
-          })}>✕</button>
+          <span style=${{display:"flex",gap:2,justifySelf:"end"}}>
+            <button type="button" className="x" aria-label=${"Open "+c.brand} title="See more" onClick=${()=>setOpenContact(c.id)}>→</button>
+            <button type="button" className="x" aria-label=${"Delete "+c.brand} onClick=${()=>askDelete("Delete "+c.brand+"?",mine.length?"This contact has "+mine.length+(mine.length===1?" collaboration":" collaborations")+". They will be deleted too.":"The contact will be removed.",()=>{
+              const ids=mine.map(x=>x.id);
+              const dels=deliverables.filter(d=>ids.includes(d.collabId));
+              api.remove([["contacts",c.id],...ids.map(id=>["collabs",id]),...dels.flatMap(d=>[["deliverables",d.id],["tasks","cd-"+d.id]])]);
+            })}>✕</button>
+          </span>
         </div>`;
       })}
+    </div>
+  </div>`;
+}
+
+/* ---------- Contact panel ---------- */
+function ContactPanel(p){
+  const {contact:oc,st,api,dkk,onClose,askDelete,setOpen,setTab,newCollab}=p;
+  const mine=st.collabs.filter(x=>x.contactId===oc.id).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const openCollab=id=>{onClose();setTab("dash");setOpen(id)};
+  const fields=[
+    {k:"person",label:"Contact person",value:oc.person},
+    {k:"email",label:"Email",value:oc.email},
+    {k:"website",label:"Website",value:oc.website},
+    {k:"social",label:"Social handle",value:oc.social},
+    {k:"lastContactDate",label:"Last contacted",value:oc.lastContactDate,type:"date"},
+    {k:"followUpDate",label:"Follow up again",value:oc.followUpDate,type:"date"},
+    {k:"folder",label:"Folder link",value:oc.folder}
+  ];
+
+  return html`<div className="scrim panel-wrap" onClick=${onClose}>
+    <div className="panel" onClick=${stop} role="dialog" aria-modal="true" aria-label=${oc.brand}>
+      <div className="panel-head">
+        <input id="cm-brand" aria-label="Brand" className="quiet" value=${oc.brand} onChange=${val(v=>api.patch("contacts",oc.id,{brand:v}))} style=${{flex:1,minWidth:0,fontSize:22,fontWeight:700,letterSpacing:"-.035em",borderRadius:8,padding:"2px 4px"}}/>
+        <button type="button" className="nav-btn" style=${{width:28,height:28,borderRadius:8,fontSize:12}} aria-label="Close" onClick=${onClose}>✕</button>
+      </div>
+      <div className="panel-body" style=${{paddingTop:14,paddingBottom:40}}>
+        <div style=${{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+          <select id="cm-status" aria-label="Relationship" value=${oc.status} onChange=${val(v=>api.patch("contacts",oc.id,{status:v},0))} style=${{border:0,borderRadius:8,background:"var(--ink)",color:"var(--surface)",padding:"7px 12px",fontSize:12.5,fontWeight:500}}><${Options} list=${CSTATUS}/></select>
+          <button type="button" className="x" style=${{marginLeft:"auto",width:"auto",padding:"0 8px",fontSize:12}} onClick=${()=>askDelete("Delete "+oc.brand+"?",mine.length?"This contact has "+mine.length+(mine.length===1?" collaboration":" collaborations")+". They will be deleted too.":"The contact will be removed.",()=>{
+            const ids=mine.map(x=>x.id);
+            const dels=st.deliverables.filter(d=>ids.includes(d.collabId));
+            api.remove([["contacts",oc.id],...ids.map(id=>["collabs",id]),...dels.flatMap(d=>[["deliverables",d.id],["tasks","cd-"+d.id]])]);
+            onClose();
+          })}>Delete</button>
+        </div>
+
+        <div className="fgrid">
+          ${fields.map(f=>html`<label key=${f.k} style=${{display:"block",marginBottom:10,minWidth:0}}>
+            <span className="kicker" style=${{display:"block",marginBottom:3}}>${f.label}</span>
+            <input id=${"cm-"+f.k} className="field" type=${f.type||"text"} value=${f.value||""} onChange=${val(v=>api.patch("contacts",oc.id,{[f.k]:v},f.type==="date"?0:undefined))}/>
+          </label>`)}
+        </div>
+
+        <div style=${{margin:"4px 0 20px"}}>
+          <label htmlFor="cm-notes" className="kicker" style=${{display:"block",marginBottom:5}}>What they said · notes</label>
+          <textarea id="cm-notes" className="field" rows="4" value=${oc.notes||""} onChange=${val(v=>api.patch("contacts",oc.id,{notes:v}))} placeholder="What they responded, context from the last call, anything worth remembering" style=${{borderRadius:11,padding:"9px 11px",lineHeight:1.55,resize:"vertical"}}></textarea>
+        </div>
+
+        <div>
+          <div style=${{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <h4 style=${{fontSize:16,fontWeight:600,margin:0,letterSpacing:"-.022em"}}>Connected deals</h4>
+            <span style=${{fontSize:12,color:"var(--muted)"}}>${mine.length}</span>
+            <button type="button" className="btn-dark" style=${{marginLeft:"auto",borderRadius:8,padding:"6px 14px",fontSize:12.5}} onClick=${()=>{onClose();newCollab("Potential",oc)}}>Start collab</button>
+          </div>
+          <div style=${{display:"flex",flexDirection:"column",gap:8}}>
+            ${mine.length===0&&html`<div className="empty-drop">No collaborations yet</div>`}
+            ${mine.map(c=>html`<div key=${c.id} className="del" style=${{cursor:"pointer"}} onClick=${()=>openCollab(c.id)}>
+              <div style=${{display:"flex",alignItems:"center",gap:10}}>
+                <span style=${{fontSize:13.5,fontWeight:500,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>${c.brand}</span>
+                <span className="num" style=${{fontSize:12.5,color:"var(--ink-2)"}}>${kr(dkk(c))}</span>
+                <span style=${{fontSize:11.5,color:"var(--muted)"}}>${c.stage}</span>
+              </div>
+            </div>`)}
+          </div>
+        </div>
+      </div>
     </div>
   </div>`;
 }
