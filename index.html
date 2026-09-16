@@ -442,6 +442,26 @@ function App(){
     document.body.style.overflow=anyOpen?"hidden":"";
     return()=>{document.body.style.overflow=""};
   },[confirm,quick,login,open]);
+  // Every non-published deliverable gets a matching Content to-do, kept in
+  // sync as it changes and marked done the moment it publishes. Deterministic
+  // "cd-<id>" ids mean two clients racing to sync converge on the same row
+  // instead of creating duplicates. Must run unconditionally (before the
+  // early returns below) so hook order stays identical on every render.
+  useEffect(()=>{
+    st.deliverables.forEach(d=>{
+      const taskId="cd-"+d.id;
+      const existing=st.tasks.find(x=>x.id===taskId);
+      const c=st.collabs.find(x=>x.id===d.collabId);
+      const title=(c?c.brand:"")+" — "+d.name;
+      const meta=d.platform+" · "+d.type+(d.publishDate?" · publishes "+fmtDate(d.publishDate):"");
+      const shouldBeDone=d.status==="Published";
+      if(!existing){
+        if(!shouldBeDone)api.add("tasks",{id:taskId,group:"Content",title,meta,done:false,collabId:d.collabId,createdAt:0});
+      }else if(existing.done!==shouldBeDone||existing.title!==title||existing.meta!==meta){
+        api.patch("tasks",taskId,{done:shouldBeDone,title,meta},0);
+      }
+    });
+  },[st.deliverables]);
 
   if(SUPABASE_READY&&auth.loading)return html`<div className="gate"><span className="kicker">Loading…</span></div>`;
   if(SUPABASE_READY&&!auth.session)return html`<${LoginGate}/>`;
@@ -493,25 +513,6 @@ function App(){
       if(!tasks.some(x=>x.id===taskId))api.add("tasks",{id:taskId,group:"Finance",title:"Send "+c.brand+" invoice",meta:kr(dkk(c))+" · ready to invoice",done:false,collabId:c.id,createdAt:0});
     }
   };
-
-  // Every non-published deliverable gets a matching Content to-do, kept in
-  // sync as it changes and marked done the moment it publishes. Deterministic
-  // "cd-<id>" ids mean two clients racing to sync converge on the same row
-  // instead of creating duplicates.
-  useEffect(()=>{
-    deliverables.forEach(d=>{
-      const taskId="cd-"+d.id;
-      const existing=tasks.find(x=>x.id===taskId);
-      const title=brandOf(d.collabId)+" — "+d.name;
-      const meta=d.platform+" · "+d.type+(d.publishDate?" · publishes "+fmtDate(d.publishDate):"");
-      const shouldBeDone=d.status==="Published";
-      if(!existing){
-        if(!shouldBeDone)api.add("tasks",{id:taskId,group:"Content",title,meta,done:false,collabId:d.collabId,createdAt:0});
-      }else if(existing.done!==shouldBeDone||existing.title!==title||existing.meta!==meta){
-        api.patch("tasks",taskId,{done:shouldBeDone,title,meta},0);
-      }
-    });
-  },[deliverables]);
 
   const common={st,api,dkk,brandOf,collabDate,startDrag,endDrag,allowDrop,leaveDrop,dropTarget,setDropTarget,drag,askDelete,setOpen,setTab,deleteCollab,newCollab,setStage};
 
