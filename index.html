@@ -506,15 +506,24 @@ function App(){
     const c=api.add("collabs",{id:uid("k"),contactId:ct.id,brand:ct.brand,owner:"Aleksandra",price:0,currency:"DKK",finStatus:kanban==="Potential"?"Potential":"Booked",stage:kanban==="Completed"?"Done":kanban==="Ongoing"?"Order products":"Need to respond",kanban:kanban||"Potential",pitch:"",notes:"",folder:"",contract:"",startDate:"",endDate:"",invoice:""});
     setTab("dash");setOpen(c.id);
   };
-  const setStage=(c,stage)=>{
-    api.patch("collabs",c.id,{stage},0);
-    if(stage==="Send invoice"){
+  // Only fires once a collab is both in the stage "Send invoice" AND sitting
+  // in the Completed column -- either changing alone isn't enough.
+  const maybeInvoiceTask=c=>{
+    if(c.stage==="Send invoice"&&c.kanban==="Completed"){
       const taskId="inv-"+c.id;
       if(!tasks.some(x=>x.id===taskId))api.add("tasks",{id:taskId,group:"Finance",title:"Send "+c.brand+" invoice",meta:kr(dkk(c))+" · ready to invoice",done:false,collabId:c.id,createdAt:0});
     }
   };
+  const setStage=(c,stage)=>{
+    api.patch("collabs",c.id,{stage},0);
+    maybeInvoiceTask({...c,stage});
+  };
+  const setKanban=(c,kanban)=>{
+    api.patch("collabs",c.id,{kanban},0);
+    maybeInvoiceTask({...c,kanban});
+  };
 
-  const common={st,api,dkk,brandOf,collabDate,startDrag,endDrag,allowDrop,leaveDrop,dropTarget,setDropTarget,drag,askDelete,setOpen,setTab,deleteCollab,newCollab,setStage};
+  const common={st,api,dkk,brandOf,collabDate,startDrag,endDrag,allowDrop,leaveDrop,dropTarget,setDropTarget,drag,askDelete,setOpen,setTab,deleteCollab,newCollab,setStage,setKanban};
 
   const sync = st.mode==="loading"?"Loading…":st.mode==="local"?"Example data · not saved":st.mode==="offline"?"Read-only":(st.saving?"Saving…":"Saved");
 
@@ -755,7 +764,7 @@ function Dashboard(p){
       ${KAN.map(col=>{
         const list=boardScoped.filter(c=>c.kanban===col);
         return html`<div key=${col} className=${"col"+(p.dropTarget==="col:"+col?" hot":"")} onDragOver=${p.allowDrop("col:"+col)} onDragLeave=${p.leaveDrop("col:"+col)}
-          onDrop=${e=>{e.preventDefault();const d=p.drag.current;p.setDropTarget(null);if(d&&d.kind==="collab")api.patch("collabs",d.id,{kanban:col},0);p.drag.current=null}}>
+          onDrop=${e=>{e.preventDefault();const d=p.drag.current;p.setDropTarget(null);if(d&&d.kind==="collab"){const cc=p.st.collabs.find(x=>x.id===d.id);if(cc)p.setKanban(cc,col)}p.drag.current=null}}>
           <div style=${{display:"flex",alignItems:"baseline",gap:9,padding:"0 2px 12px"}}>
             <h3 style=${{fontSize:14,fontWeight:600,margin:0,letterSpacing:"-.018em"}}>${col}</h3>
             <span className="num" style=${{fontSize:12,color:"var(--faint)"}}>${list.length}</span>
@@ -1005,7 +1014,7 @@ function CollabPanel(p){
       <div className="panel-body" style=${{paddingTop:14,paddingBottom:40}}>
         <div style=${{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
           <select id="m-stage" aria-label="Stage" value=${oc.stage} onChange=${val(v=>p.setStage(oc,v))} style=${{border:0,borderRadius:8,background:"var(--ink)",color:"var(--surface)",padding:"7px 12px",fontSize:12.5,fontWeight:500}}><${Options} list=${STAGES}/></select>
-          <select id="m-kanban" aria-label="Board column" className="psel" value=${oc.kanban} onChange=${pc("kanban",0)}><${Options} list=${KAN}/></select>
+          <select id="m-kanban" aria-label="Board column" className="psel" value=${oc.kanban} onChange=${val(v=>p.setKanban(oc,v))}><${Options} list=${KAN}/></select>
           <select id="m-fin" aria-label="Financial status" className="psel" value=${oc.finStatus} onChange=${pc("finStatus",0)}><${Options} list=${FIN}/></select>
           <select id="m-owner" aria-label="Owner" className="psel" value=${oc.owner} onChange=${pc("owner",0)}><${Options} list=${OWNERS}/></select>
           <select id="m-contact" aria-label="Brand contact" className="psel" value=${oc.contactId} onChange=${val(v=>api.patch("collabs",oc.id,{contactId:v},0))} title="Linked contact">
