@@ -623,13 +623,21 @@ function Dashboard(p){
   const lastMonth=monthRevenue(prev.getFullYear(),prev.getMonth(),["Paid","Invoiced"]);
   const mom=lastMonth>0?Math.round((thisMonth-lastMonth)/lastMonth*100):null;
   const avg=won.length?Math.round(secured/won.length):0;
+  const bookedThisMonth=monthRevenue(t.getFullYear(),t.getMonth(),["Booked"]);
+  const bookedLastMonth=monthRevenue(prev.getFullYear(),prev.getMonth(),["Booked"]);
+  const momBooked=bookedLastMonth>0?Math.round((bookedThisMonth-bookedLastMonth)/bookedLastMonth*100):null;
+  const paidThisMonth=monthRevenue(t.getFullYear(),t.getMonth(),["Paid"]);
+  const invoicedThisMonth=monthRevenue(t.getFullYear(),t.getMonth(),["Invoiced"]);
+  const bookedSubParts=[];
+  if(paidThisMonth>0)bookedSubParts.push(kr(paidThisMonth)+" paid");
+  if(invoicedThisMonth>0)bookedSubParts.push(kr(invoicedThisMonth)+" invoiced");
   const monthPick=/^(\d{4})-(\d{2})$/.exec(period);
   const titleMap={"This month":MONTHS[t.getMonth()]+" performance","Last month":MONTHS[prev.getMonth()]+" performance","Next month":MONTHS[next.getMonth()]+" performance","This year":t.getFullYear()+" performance","All time":"All-time performance"};
   const pageTitle=monthPick?MONTHS[Number(monthPick[2])-1]+" "+monthPick[1]+" performance":(titleMap[period]||"Performance");
 
   const kpis=[
-    {label:"Revenue this month",value:kr(thisMonth),delta:mom===null?"No comparison":(mom>=0?"+":"")+mom+"% vs "+MONTHS[prev.getMonth()],dc:mom!==null&&mom<0?"var(--muted)":"var(--ink)",
-      sub:kr(monthRevenue(t.getFullYear(),t.getMonth(),["Booked"]))+" booked · "+kr(monthRevenue(t.getFullYear(),t.getMonth(),["Invoiced"]))+" invoiced"},
+    {label:"Booked this month",value:kr(bookedThisMonth),delta:momBooked===null?"No comparison":(momBooked>=0?"+":"")+momBooked+"% vs "+MONTHS[prev.getMonth()],dc:momBooked!==null&&momBooked<0?"var(--muted)":"var(--ink)",
+      sub:bookedSubParts.length?bookedSubParts.join(" · "):"Nothing paid or invoiced yet"},
     {label:"Average collab value",value:kr(avg),delta:won.length+" won collabs",dc:"var(--ink-2)",sub:"Across the selected period"},
     {label:"Steph's cut",value:kr(stephCut),delta:stephList.length+" collabs",dc:"var(--ink-2)",sub:"10% of Steph's collabs"}
   ];
