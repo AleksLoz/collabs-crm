@@ -443,26 +443,6 @@ function App(){
     document.body.style.overflow=anyOpen?"hidden":"";
     return()=>{document.body.style.overflow=""};
   },[confirm,quick,login,open,openContact]);
-  // Every non-published deliverable gets a matching Content to-do, kept in
-  // sync as it changes and marked done the moment it publishes. Deterministic
-  // "cd-<id>" ids mean two clients racing to sync converge on the same row
-  // instead of creating duplicates. Must run unconditionally (before the
-  // early returns below) so hook order stays identical on every render.
-  useEffect(()=>{
-    st.deliverables.forEach(d=>{
-      const taskId="cd-"+d.id;
-      const existing=st.tasks.find(x=>x.id===taskId);
-      const c=st.collabs.find(x=>x.id===d.collabId);
-      const title=(c?c.brand:"")+" — "+d.name;
-      const meta=d.platform+" · "+d.type+(d.publishDate?" · publishes "+fmtDate(d.publishDate):"");
-      const shouldBeDone=d.status==="Published";
-      if(!existing){
-        if(!shouldBeDone)api.add("tasks",{id:taskId,group:"Content",title,meta,done:false,collabId:d.collabId,createdAt:0});
-      }else if(existing.done!==shouldBeDone||existing.title!==title||existing.meta!==meta){
-        api.patch("tasks",taskId,{done:shouldBeDone,title,meta},0);
-      }
-    });
-  },[st.deliverables]);
 
   if(SUPABASE_READY&&auth.loading)return html`<div className="gate"><span className="kicker">Loading…</span></div>`;
   if(SUPABASE_READY&&!auth.session)return html`<${LoginGate}/>`;
@@ -523,8 +503,18 @@ function App(){
     api.patch("collabs",c.id,{kanban},0);
     maybeInvoiceTask({...c,kanban});
   };
+  // Manual, one-shot -- clicking the arrow on a deliverable adds it to
+  // Content to-do. Deterministic "cd-<id>" means clicking twice is harmless.
+  const addContentTask=d=>{
+    const taskId="cd-"+d.id;
+    if(tasks.some(x=>x.id===taskId))return;
+    const c=collabs.find(x=>x.id===d.collabId);
+    const title=(c?c.brand:"")+" — "+d.name;
+    const meta=d.platform+" · "+d.type+(d.publishDate?" · publishes "+fmtDate(d.publishDate):"");
+    api.add("tasks",{id:taskId,group:"Content",title,meta,done:false,collabId:d.collabId});
+  };
 
-  const common={st,api,dkk,brandOf,collabDate,startDrag,endDrag,allowDrop,leaveDrop,dropTarget,setDropTarget,drag,askDelete,setOpen,setOpenContact,setTab,deleteCollab,newCollab,setStage,setKanban};
+  const common={st,api,dkk,brandOf,collabDate,startDrag,endDrag,allowDrop,leaveDrop,dropTarget,setDropTarget,drag,askDelete,setOpen,setOpenContact,setTab,deleteCollab,newCollab,setStage,setKanban,addContentTask};
 
   const sync = st.mode==="loading"?"Loading…":st.mode==="local"?"Example data · not saved":st.mode==="offline"?"Read-only":(st.saving?"Saving…":"Saved");
 
@@ -742,7 +732,12 @@ function Dashboard(p){
       <div className="todo-grid">
         ${TASK_GROUPS.map(group=>{const items=tasks.filter(x=>x.group===group);return html`<div key=${group}>
           <div style=${{fontSize:12,fontWeight:500,letterSpacing:".14em",textTransform:"uppercase",color:"var(--muted)",marginBottom:10}}>${group}</div>
-          ${items.map(x=>html`<div key=${x.id} className="task">
+          ${items.map(x=>html`<div key=${x.id} className="task" draggable="true" style=${{cursor:"grab"}}
+              onDragStart=${p.startDrag("task",x.id)} onDragEnd=${p.endDrag} onDragOver=${e=>e.preventDefault()}
+              onDrop=${e=>{e.preventDefault();const d=p.drag.current;if(d&&d.kind==="task"&&d.id!==x.id){
+                const arr=items.slice();const from=arr.findIndex(t=>t.id===d.id);const to=arr.findIndex(t=>t.id===x.id);
+                if(from>-1&&to>-1){const[moved]=arr.splice(from,1);arr.splice(to,0,moved);arr.forEach((t,i)=>api.patch("tasks",t.id,{createdAt:i},0))}
+              }p.drag.current=null}}>
             <button type="button" className=${"check"+(x.done?" done":"")} aria-label=${x.done?"Mark as not done":"Mark as done"} onClick=${()=>api.patch("tasks",x.id,{done:!x.done},0)}></button>
             <div style=${{flex:1,minWidth:0}}>
               <input id=${"task-t-"+x.id} className="quiet" aria-label="Task" value=${x.title} onChange=${val(v=>api.patch("tasks",x.id,{title:v}))}
@@ -935,7 +930,11 @@ function Calendar(p){
 function Contacts(p){
   const {st,api,cFilter,setCFilter,cSort,setCSort,setOpen,setOpenContact,setTab,askDelete,newCollab}=p;
   const {contacts,collabs,deliverables}=st;
-  const rows=contacts.filter(c=>cFilter==="All statuses"||c.status===cFilter).slice().sort((a,b)=>{
+  const [search,setSearch]=useState("");
+  const q=search.trim().toLowerCase();
+  const rows=contacts.filter(c=>cFilter==="All statuses"||c.status===cFilter)
+    .filter(c=>!q||[c.brand,c.person,c.email,c.social].some(v=>(v||"").toLowerCase().includes(q)))
+    .slice().sort((a,b)=>{
     if(cSort==="Brand A–Z")return (a.brand||"").localeCompare(b.brand||"");
     if(cSort==="Last contact")return (b.lastContactDate||"").localeCompare(a.lastContactDate||"");
     return (a.followUpDate||"9999").localeCompare(b.followUpDate||"9999");
@@ -947,6 +946,7 @@ function Contacts(p){
       <h2 style=${{fontSize:24,fontWeight:700,margin:0,letterSpacing:"-.035em"}}>Contacts</h2>
       <span className="num" style=${{fontSize:12.5,color:"var(--muted)"}}>${rows.length} of ${contacts.length}</span>
       <div style=${{marginLeft:"auto",display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <input type="search" aria-label="Search contacts" className="sel-box" placeholder="Search brand, person, email…" value=${search} onChange=${val(setSearch)} style=${{width:200}}/>
         <select id="c-filter" aria-label="Filter by relationship" className="sel-box" value=${cFilter} onChange=${val(setCFilter)}><${Options} list=${["All statuses"].concat(CSTATUS)}/></select>
         <select id="c-sort" aria-label="Sort" className="sel-box" value=${cSort} onChange=${val(setCSort)}><${Options} list=${["Follow-up date","Brand A–Z","Last contact"]}/></select>
         <button type="button" className="btn-dark" style=${{padding:"6px 14px",fontSize:12.5,borderRadius:9}} onClick=${addContact}>Add contact</button>
@@ -1138,6 +1138,9 @@ function CollabPanel(p){
                 <select id=${"dp-"+d.id} aria-label="Platform" value=${d.platform} onChange=${val(v=>api.patch("deliverables",d.id,{platform:v},0))} style=${{border:0,borderRadius:8,background:"var(--surface)",padding:"4px 9px",fontSize:11.5}}><${Options} list=${PLATFORMS}/></select>
                 <select id=${"ds-"+d.id} aria-label="Status" value=${d.status} onChange=${val(v=>api.patch("deliverables",d.id,{status:v},0))}
                   style=${{border:0,borderRadius:8,padding:"4px 10px",fontSize:11.5,background:d.status==="Published"?"var(--surface)":"var(--ink)",color:d.status==="Published"?"var(--muted)":"var(--surface)"}}><${Options} list=${DSTATUS}/></select>
+                ${st.tasks.some(x=>x.id==="cd-"+d.id)
+                  ?html`<span style=${{fontSize:11,color:"var(--muted)"}} title="Already on the Content to-do list">✓ On to-do</span>`
+                  :html`<button type="button" className="x" style=${{width:"auto",padding:"0 8px",fontSize:11,color:"var(--ink-2)"}} aria-label=${"Add "+d.name+" to to-do"} title="Add to to-do" onClick=${()=>p.addContentTask(d)}>↑ To-do</button>`}
                 <button type="button" className="x" style=${{color:"var(--faint)"}} aria-label="Delete deliverable" onClick=${()=>askDelete("Delete this deliverable?","“"+d.name+"” will be removed from "+oc.brand+" and from the calendar.",()=>api.remove([["deliverables",d.id],["tasks","cd-"+d.id]]))}>✕</button>
               </div>
               <div style=${{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10}}>
