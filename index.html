@@ -767,7 +767,8 @@ function Dashboard(p){
 
     <section className="kanban">
       ${KAN.map(col=>{
-        const list=boardScoped.filter(c=>c.kanban===col);
+        const stagePriority=c=>c.stage==="Send a brief"||c.stage==="Need to respond"?0:c.stage==="Waiting on brand"?2:1;
+        const list=boardScoped.filter(c=>c.kanban===col).sort((a,b)=>stagePriority(a)-stagePriority(b));
         return html`<div key=${col} className=${"col"+(p.dropTarget==="col:"+col?" hot":"")} onDragOver=${p.allowDrop("col:"+col)} onDragLeave=${p.leaveDrop("col:"+col)}
           onDrop=${e=>{e.preventDefault();const d=p.drag.current;p.setDropTarget(null);if(d&&d.kind==="collab"){const cc=p.st.collabs.find(x=>x.id===d.id);if(cc)p.setKanban(cc,col)}p.drag.current=null}}>
           <div style=${{display:"flex",alignItems:"baseline",gap:9,padding:"0 2px 12px"}}>
