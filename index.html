@@ -524,7 +524,7 @@ function App(){
       <div className="hdr-row">
         <span className="brand">Collabs</span>
         <nav className="tabs">
-          ${[["dash","Dashboard"],["cal","Calendar"],["contacts","Contacts"]].map(([k,l])=>html`<button key=${k} type="button" className=${"tab"+(tab===k?" on":"")} onClick=${()=>setTab(k)}>${l}</button>`)}
+          ${[["dash","Dashboard"],["cal","Calendar"],["contacts","Contacts"],["archive","Archive"]].map(([k,l])=>html`<button key=${k} type="button" className=${"tab"+(tab===k?" on":"")} onClick=${()=>setTab(k)}>${l}</button>`)}
         </nav>
         <div className="hdr-right">
           <div style=${{display:"flex",gap:4}}>
@@ -548,6 +548,7 @@ function App(){
     ${tab==="cal"&&html`<${Calendar} ...${common} calMode=${calMode} setCalMode=${setCalMode} cursor=${cursor} setCursor=${setCursor}
         sidebar=${sidebar} setSidebar=${setSidebar} openQuick=${iso=>{setQuick(iso);setQuickTitle("")}}/>`}
     ${tab==="contacts"&&html`<${Contacts} ...${common} cFilter=${cFilter} setCFilter=${setCFilter} cSort=${cSort} setCSort=${setCSort}/>`}
+    ${tab==="archive"&&html`<${Archive} ...${common}/>`}
 
     ${open&&collabs.find(c=>c.id===open)&&html`<${CollabPanel} ...${common} collab=${collabs.find(c=>c.id===open)} onClose=${()=>setOpen(null)}/>`}
     ${openContact&&contacts.find(c=>c.id===openContact)&&html`<${ContactPanel} ...${common} contact=${contacts.find(c=>c.id===openContact)} onClose=${()=>setOpenContact(null)}/>`}
@@ -607,6 +608,7 @@ function Dashboard(p){
   // The board is a look-ahead view, not an accounting one: a collab with
   // deliverables spanning two months should show up under both.
   const boardScoped=collabs.filter(c=>{
+    if(c.archived)return false;
     const dates=deliverables.filter(d=>d.collabId===c.id&&d.publishDate).map(d=>d.publishDate);
     const candidates=dates.length?dates:[collabDate(c)];
     return candidates.some(inPeriod);
@@ -619,8 +621,8 @@ function Dashboard(p){
   const pct=effectiveGoal>0?Math.round(secured/effectiveGoal*100):0;
   const stephList=scoped.filter(c=>c.owner==="Steph");
   const stephCut=stephList.reduce((a,c)=>a+dkk(c),0)*STEPH_CUT;
-  const thisMonth=monthRevenue(t.getFullYear(),t.getMonth(),["Paid","Invoiced"]);
-  const lastMonth=monthRevenue(prev.getFullYear(),prev.getMonth(),["Paid","Invoiced"]);
+  const thisMonth=monthRevenue(t.getFullYear(),t.getMonth(),["Invoiced"]);
+  const lastMonth=monthRevenue(prev.getFullYear(),prev.getMonth(),["Invoiced"]);
   const mom=lastMonth>0?Math.round((thisMonth-lastMonth)/lastMonth*100):null;
   const avg=won.length?Math.round(secured/won.length):0;
   const bookedThisMonth=monthRevenue(t.getFullYear(),t.getMonth(),["Booked"]);
@@ -645,7 +647,7 @@ function Dashboard(p){
   // chart
   const months=[];
   for(let i=6;i>=0;i--){const d=new Date(t.getFullYear(),t.getMonth()-i,1);months.push({y:d.getFullYear(),m:d.getMonth(),label:MONTHS[d.getMonth()].slice(0,3)})}
-  const values=months.map(x=>monthRevenue(x.y,x.m,["Paid","Invoiced"]));
+  const values=months.map(x=>monthRevenue(x.y,x.m,["Invoiced"]));
   const top=30,bottom=160,plot=bottom-top,vbH=186;
   const maxVal=Math.max(goal,...values)*1.16||1;
   const yFor=v=>bottom-(v/maxVal)*plot;
@@ -686,7 +688,7 @@ function Dashboard(p){
         <div className="card chart-card">
           <div style=${{display:"flex",alignItems:"baseline",gap:12,flexWrap:"wrap",marginBottom:2}}>
             <h3 style=${{fontSize:15,fontWeight:600,margin:0,letterSpacing:"-.018em"}}>Revenue month after month</h3>
-            <span style=${{fontSize:12.5,color:"var(--muted)"}}>Paid and invoiced, in DKK</span>
+            <span style=${{fontSize:12.5,color:"var(--muted)"}}>Invoiced, in DKK</span>
             <div style=${{marginLeft:"auto",display:"flex",alignItems:"baseline",gap:10}}>
               <span className="num" style=${{fontSize:20,fontWeight:700,letterSpacing:"-.03em",color:mom!==null&&mom<0?"var(--muted)":"var(--ink)"}}>${mom===null?"—":(mom>=0?"+":"")+mom+"%"}</span>
               <span style=${{fontSize:12.5,color:"var(--ink-2)"}}>${mom===null?"no comparison with "+MONTHS[prev.getMonth()]:kr(Math.abs(thisMonth-lastMonth))+(thisMonth>=lastMonth?" more than ":" less than ")+MONTHS[prev.getMonth()]}</span>
@@ -738,7 +740,7 @@ function Dashboard(p){
         <span style=${{fontSize:14,color:"var(--muted)"}}>${openTasks}${openTasks===1?" thing needs":" things need"} your attention</span>
       </div>
       <div className="todo-grid">
-        ${TASK_GROUPS.map(group=>{const items=tasks.filter(x=>x.group===group);return html`<div key=${group}>
+        ${TASK_GROUPS.map(group=>{const items=tasks.filter(x=>x.group===group&&!x.archived);return html`<div key=${group}>
           <div style=${{fontSize:12,fontWeight:500,letterSpacing:".14em",textTransform:"uppercase",color:"var(--muted)",marginBottom:10}}>${group}</div>
           ${items.map(x=>html`<div key=${x.id} className="task" draggable="true" style=${{cursor:"grab"}}
               onDragStart=${p.startDrag("task",x.id)} onDragEnd=${p.endDrag} onDragOver=${e=>e.preventDefault()}
@@ -754,6 +756,7 @@ function Dashboard(p){
                 <input id=${"task-m-"+x.id} className="quiet" aria-label="Details" placeholder="Add details" value=${x.meta} onChange=${val(v=>api.patch("tasks",x.id,{meta:v}))}
                   style=${{flex:1,minWidth:0,fontSize:13,color:x.done?"var(--dash-2)":"var(--muted)",textDecoration:x.done?"line-through":"none"}}/>
                 ${x.collabId&&st.collabs.some(c=>c.id===x.collabId)&&html`<button type="button" onClick=${()=>setOpen(x.collabId)} style=${{flex:"none",background:"transparent",border:0,padding:0,fontSize:11.5,color:"var(--muted)",textDecoration:"underline",textUnderlineOffset:2}}>Open</button>`}
+                ${x.done&&html`<button type="button" onClick=${()=>api.patch("tasks",x.id,{archived:true},0)} style=${{flex:"none",background:"transparent",border:0,padding:0,fontSize:11.5,color:"var(--muted)",textDecoration:"underline",textUnderlineOffset:2}}>Archive</button>`}
               </div>
             </div>
             <button type="button" className="x" aria-label="Delete task" onClick=${()=>askDelete("Delete this task?","“"+x.title+"” will be removed from To do.",()=>api.remove([["tasks",x.id]]))}>✕</button>
@@ -997,6 +1000,42 @@ function Contacts(p){
   </div>`;
 }
 
+/* ---------- Archive ---------- */
+function Archive(p){
+  const {st,api,dkk,setOpen,askDelete}=p;
+  const collabs=st.collabs.filter(c=>c.archived).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const tasks=st.tasks.filter(x=>x.archived).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  return html`<div className="page" style=${{paddingTop:24}}>
+    <h2 style=${{fontSize:24,fontWeight:700,margin:"0 0 18px",letterSpacing:"-.035em"}}>Archive</h2>
+
+    <div style=${{marginBottom:28}}>
+      <h3 style=${{fontSize:15,fontWeight:600,margin:"0 0 10px",letterSpacing:"-.018em"}}>Collaborations</h3>
+      ${collabs.length===0&&html`<p style=${{color:"var(--muted)",fontSize:13,margin:0}}>Nothing archived yet.</p>`}
+      <div style=${{display:"flex",flexDirection:"column",gap:8}}>
+        ${collabs.map(c=>html`<div key=${c.id} className="card" style=${{padding:"11px 15px",display:"flex",alignItems:"center",gap:12}}>
+          <span style=${{flex:1,minWidth:0,fontSize:13.5,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:"pointer"}} onClick=${()=>setOpen(c.id)}>${c.brand}</span>
+          <span className="num" style=${{fontSize:12.5,color:"var(--ink-2)"}}>${kr(dkk(c))}</span>
+          <span style=${{fontSize:11.5,color:"var(--muted)"}}>${c.stage}</span>
+          <button type="button" className="btn" style=${{padding:"4px 10px",fontSize:11.5}} onClick=${()=>api.patch("collabs",c.id,{archived:false},0)}>Unarchive</button>
+        </div>`)}
+      </div>
+    </div>
+
+    <div>
+      <h3 style=${{fontSize:15,fontWeight:600,margin:"0 0 10px",letterSpacing:"-.018em"}}>Tasks</h3>
+      ${tasks.length===0&&html`<p style=${{color:"var(--muted)",fontSize:13,margin:0}}>Nothing archived yet.</p>`}
+      <div style=${{display:"flex",flexDirection:"column",gap:8}}>
+        ${tasks.map(x=>html`<div key=${x.id} className="card" style=${{padding:"11px 15px",display:"flex",alignItems:"center",gap:12}}>
+          <span style=${{flex:1,minWidth:0,fontSize:13.5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>${x.title}</span>
+          <span style=${{fontSize:11.5,color:"var(--muted)"}}>${x.group}</span>
+          <button type="button" className="btn" style=${{padding:"4px 10px",fontSize:11.5}} onClick=${()=>api.patch("tasks",x.id,{archived:false},0)}>Unarchive</button>
+          <button type="button" className="x" aria-label="Delete task" onClick=${()=>askDelete("Delete this task?","“"+x.title+"” will be permanently removed.",()=>api.remove([["tasks",x.id]]))}>✕</button>
+        </div>`)}
+      </div>
+    </div>
+  </div>`;
+}
+
 /* ---------- Contact panel ---------- */
 function ContactPanel(p){
   const {contact:oc,st,api,dkk,onClose,askDelete,setOpen,setTab,newCollab}=p;
@@ -1054,6 +1093,7 @@ function ContactPanel(p){
                 <span style=${{fontSize:13.5,fontWeight:500,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>${c.brand}</span>
                 <span className="num" style=${{fontSize:12.5,color:"var(--ink-2)"}}>${kr(dkk(c))}</span>
                 <span style=${{fontSize:11.5,color:"var(--muted)"}}>${c.stage}</span>
+                ${c.archived&&html`<span className="kicker">Archived</span>`}
               </div>
             </div>`)}
           </div>
@@ -1089,6 +1129,7 @@ function CollabPanel(p){
           api.patch("collabs",oc.id,{brand:v});
           if(contact.id&&siblings===1)api.patch("contacts",contact.id,{brand:v});
         })} style=${{flex:1,minWidth:0,fontSize:22,fontWeight:700,letterSpacing:"-.035em",borderRadius:8,padding:"2px 4px"}}/>
+        ${oc.archived&&html`<span className="kicker" style=${{flex:"none"}}>Archived</span>`}
         <button type="button" className="nav-btn" style=${{width:28,height:28,borderRadius:8,fontSize:12}} aria-label="Close" onClick=${onClose}>✕</button>
       </div>
       <div className="panel-body" style=${{paddingTop:14,paddingBottom:40}}>
@@ -1100,7 +1141,8 @@ function CollabPanel(p){
           <select id="m-contact" aria-label="Brand contact" className="psel" value=${oc.contactId} onChange=${val(v=>api.patch("collabs",oc.id,{contactId:v},0))} title="Linked contact">
             ${st.contacts.slice().sort((a,b)=>(a.brand||"").localeCompare(b.brand||"")).map(c=>html`<option key=${c.id} value=${c.id}>Contact: ${c.brand}${c.person?" · "+c.person:""}</option>`)}
           </select>
-          <button type="button" className="x" style=${{marginLeft:"auto",width:"auto",padding:"0 8px",fontSize:12}} onClick=${()=>p.deleteCollab(oc)}>Delete</button>
+          <button type="button" className="btn" style=${{marginLeft:"auto",padding:"6px 12px",fontSize:12}} onClick=${()=>api.patch("collabs",oc.id,{archived:!oc.archived},0)}>${oc.archived?"Unarchive":"Archive"}</button>
+          <button type="button" className="x" style=${{width:"auto",padding:"0 8px",fontSize:12}} onClick=${()=>p.deleteCollab(oc)}>Delete</button>
         </div>
 
         <div style=${{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8,marginBottom:14}}>

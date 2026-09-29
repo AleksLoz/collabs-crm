@@ -35,6 +35,7 @@ create table if not exists collabs (
   "startDate" text default '',
   "endDate" text default '',
   invoice text default '',
+  archived boolean default false,
   "createdAt" bigint default 0
 );
 
@@ -71,6 +72,7 @@ create table if not exists tasks (
   title text default '',
   meta text default '',
   done boolean default false,
+  archived boolean default false,
   "collabId" text default '',
   "createdAt" bigint default 0
 );
