@@ -823,8 +823,8 @@ function KanbanCard(p){
 
 /* ---------- Calendar ---------- */
 function Calendar(p){
-  const {st,api,brandOf,calMode,setCalMode,cursor,setCursor,sidebar,setSidebar,openQuick,setOpen,setTab,askDelete,drag,setDropTarget,dropTarget}=p;
-  const {deliverables,ideas}=st;
+  const {st,api,brandOf,dkk,calMode,setCalMode,cursor,setCursor,sidebar,setSidebar,openQuick,setOpen,setTab,askDelete,drag,setDropTarget,dropTarget}=p;
+  const {deliverables,ideas,collabs}=st;
   const cur=parse(cursor);
   const weekStart=new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()-((cur.getDay()+6)%7));
   const step=n=>()=>setCursor(isoOf(calMode==="Week"?new Date(cur.getFullYear(),cur.getMonth(),cur.getDate()+7*n):new Date(cur.getFullYear(),cur.getMonth()+n,1)));
@@ -840,6 +840,24 @@ function Calendar(p){
     e.preventDefault();const d=drag.current;setDropTarget(null);if(!d)return;
     if(d.kind==="deliverable")api.patch("deliverables",d.id,{publishDate:""},0);
     if(d.kind==="idea")api.patch("ideas",d.id,{scheduledDate:""},0);
+    drag.current=null;
+  };
+
+  // "Deals" mode: one card per deliverable, price split across a collab's
+  // deliverables, in a rolling 5-month board (today's month + next 4).
+  const dealMonths=[];
+  {const td=parse(TODAY);for(let i=0;i<5;i++){const d=new Date(td.getFullYear(),td.getMonth()+i,1);dealMonths.push({y:d.getFullYear(),m:d.getMonth(),label:MONTHS[d.getMonth()]+" "+d.getFullYear()})}}
+  const perReel=d=>{
+    const c=collabs.find(x=>x.id===d.collabId);if(!c)return 0;
+    const sibs=deliverables.filter(x=>x.collabId===c.id).length||1;
+    return Math.round(dkk(c)/sibs);
+  };
+  const dropOnDealMonth=(y,m)=>e=>{
+    e.preventDefault();const d=drag.current;setDropTarget(null);if(!d||d.kind!=="deliverable")return;
+    const item=deliverables.find(x=>x.id===d.id);
+    const daysInMonth=new Date(y,m+1,0).getDate();
+    const day=item&&item.publishDate?Math.min(parse(item.publishDate).getDate(),daysInMonth):1;
+    api.patch("deliverables",d.id,{publishDate:isoOf(new Date(y,m,day)),status:item&&item.status==="Published"?"Published":"Scheduled"},0);
     drag.current=null;
   };
 
@@ -869,18 +887,45 @@ function Calendar(p){
   return html`<div className="cal-wrap">
     <div className="cal-main">
       <div style=${{display:"flex",alignItems:"center",gap:14,marginBottom:14,flexWrap:"wrap"}}>
-        <h2 style=${{fontSize:24,fontWeight:700,margin:0,minWidth:190,letterSpacing:"-.035em"}}>${calMode==="Week"?"Week of "+fmtDate(isoOf(weekStart)):calMode==="List"?"From "+MONTHS[cur.getMonth()]+" "+cur.getFullYear():MONTHS[cur.getMonth()]+" "+cur.getFullYear()}</h2>
-        <div style=${{display:"flex",gap:6}}>
+        <h2 style=${{fontSize:24,fontWeight:700,margin:0,minWidth:190,letterSpacing:"-.035em"}}>${calMode==="Deals"?"Deals by month":calMode==="Week"?"Week of "+fmtDate(isoOf(weekStart)):calMode==="List"?"From "+MONTHS[cur.getMonth()]+" "+cur.getFullYear():MONTHS[cur.getMonth()]+" "+cur.getFullYear()}</h2>
+        ${calMode!=="Deals"&&html`<div style=${{display:"flex",gap:6}}>
           <button type="button" className="nav-btn" aria-label="Previous" onClick=${step(-1)}>←</button>
           <button type="button" className="nav-btn" aria-label="Next" onClick=${step(1)}>→</button>
           <button type="button" className="nav-btn" style=${{width:"auto",padding:"0 13px",fontSize:12.5}} onClick=${()=>setCursor(TODAY)}>Today</button>
-        </div>
+        </div>`}
         <div className="pills" style=${{marginLeft:"auto",padding:4}}>
-          ${["Month","Week","List"].map(m=>html`<button key=${m} type="button" className=${"pill"+(calMode===m?" on":"")} onClick=${()=>setCalMode(m)}>${m}</button>`)}
+          ${["Month","Week","List","Deals"].map(m=>html`<button key=${m} type="button" className=${"pill"+(calMode===m?" on":"")} onClick=${()=>setCalMode(m)}>${m}</button>`)}
         </div>
       </div>
 
-      ${calMode!=="List"?html`<div className="card grid-scroll" style=${{padding:"16px 18px 18px"}}>
+      ${calMode==="Deals"?html`<div className="grid-scroll">
+        <div style=${{display:"grid",gridTemplateColumns:"repeat(5,minmax(220px,1fr))",gap:12,minWidth:1120}}>
+          ${dealMonths.map(mo=>{
+            const items=deliverables.filter(d=>{if(!d.publishDate)return false;const dd=parse(d.publishDate);return dd.getFullYear()===mo.y&&dd.getMonth()===mo.m});
+            const key="deal:"+mo.y+"-"+mo.m;
+            return html`<div key=${mo.label} className=${"col"+(dropTarget===key?" hot":"")} onDragOver=${p.allowDrop(key)} onDragLeave=${p.leaveDrop(key)} onDrop=${dropOnDealMonth(mo.y,mo.m)}>
+              <div style=${{display:"flex",alignItems:"baseline",gap:9,padding:"0 2px 12px"}}>
+                <h3 style=${{fontSize:14,fontWeight:600,margin:0,letterSpacing:"-.018em"}}>${mo.label}</h3>
+                <span className="num" style=${{fontSize:12,color:"var(--faint)"}}>${items.length}</span>
+                <span className="num" style=${{marginLeft:"auto",fontSize:12,color:"var(--ink-2)"}}>${kr(items.reduce((a,d)=>a+perReel(d),0))}</span>
+              </div>
+              <div style=${{display:"flex",flexDirection:"column",gap:10}}>
+                ${items.length===0&&html`<div className="empty-drop">Drag a reel here</div>`}
+                ${items.map(d=>html`<article key=${d.id} className="kcard" draggable="true" onDragStart=${p.startDrag("deliverable",d.id)} onDragEnd=${p.endDrag} onClick=${()=>openCollab(d.collabId)}>
+                  <div style=${{display:"flex",alignItems:"baseline",gap:8}}>
+                    <span style=${{fontSize:14,fontWeight:600,letterSpacing:"-.02em",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>${brandOf(d.collabId)}</span>
+                    <span className="num" style=${{marginLeft:"auto",fontSize:13,fontWeight:600}}>${kr(perReel(d))}</span>
+                  </div>
+                  <p className="clamp" style=${{margin:"6px 0 0"}}>${d.name}</p>
+                  <div style=${{display:"flex",alignItems:"center",gap:10,marginTop:10,paddingTop:9,borderTop:"1px solid var(--line-2)",fontSize:11.5,color:"var(--muted)"}}>
+                    <span>${d.platform}</span><span style=${{marginLeft:"auto"}}>${d.status}</span>
+                  </div>
+                </article>`)}
+              </div>
+            </div>`;
+          })}
+        </div>
+      </div>`:calMode!=="List"?html`<div className="card grid-scroll" style=${{padding:"16px 18px 18px"}}>
         <div className="grid7" style=${{marginBottom:8}}>${DAYNAMES.map(d=>html`<span key=${d} className="kicker" style=${{paddingLeft:4}}>${d}</span>`)}</div>
         <div className="grid7">
           ${cells.map(c=>html`<div key=${c.iso} className=${"cell"+(dropTarget==="date:"+c.iso?" hot":"")}
