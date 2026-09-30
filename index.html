@@ -415,6 +415,7 @@ function App(){
   const [period,setPeriod]=useState("This month");
   const [showFinance,setShowFinance]=useState(()=>lsGet("collabs.fin","1")==="1");
   const [showToday,setShowToday]=useState(()=>lsGet("collabs.todo","1")==="1");
+  const [todoView,setTodoView]=useState(()=>lsGet("collabs.todoView","todo"));
   const [open,setOpen]=useState(null);
   const [openContact,setOpenContact]=useState(null);
   const [confirm,setConfirm]=useState(null);
@@ -434,6 +435,7 @@ function App(){
   useEffect(()=>lsSet("collabs.tab",tab),[tab]);
   useEffect(()=>lsSet("collabs.fin",showFinance?"1":"0"),[showFinance]);
   useEffect(()=>lsSet("collabs.todo",showToday?"1":"0"),[showToday]);
+  useEffect(()=>lsSet("collabs.todoView",todoView),[todoView]);
   useEffect(()=>{
     const onKey=e=>{if(e.key==="Escape"){if(confirm)setConfirm(null);else if(quick)setQuick(null);else if(login)setLogin(false);else if(openContact)setOpenContact(null);else if(open)setOpen(null)}};
     window.addEventListener("keydown",onKey);return()=>window.removeEventListener("keydown",onKey);
@@ -487,6 +489,12 @@ function App(){
     const c=api.add("collabs",{id:uid("k"),contactId:ct.id,brand:ct.brand,owner:"Aleksandra",price:0,currency:"DKK",finStatus:kanban==="Potential"?"Potential":"Booked",stage:kanban==="Completed"?"Done":kanban==="Ongoing"?"Order products":"Need to respond",kanban:kanban||"Potential",pitch:"",notes:"",folder:"",contract:"",startDate:"",endDate:"",invoice:""});
     setTab("dash");setOpen(c.id);
   };
+  const newDealInMonth=(y,m)=>{
+    const ct=api.add("contacts",{id:uid("c"),brand:"New brand",person:"",email:"",website:"",social:"",folder:"",lastContactDate:TODAY,followUpDate:"",status:"Responded"});
+    const c=api.add("collabs",{id:uid("k"),contactId:ct.id,brand:ct.brand,owner:"Aleksandra",price:0,currency:"DKK",finStatus:"Booked",stage:"Need to respond",kanban:"Ongoing",pitch:"",notes:"",folder:"",contract:"",startDate:"",endDate:"",invoice:""});
+    api.add("deliverables",{id:uid("d"),collabId:c.id,name:"New deliverable",platform:"Instagram",type:"Reel",status:"Idea",shootDate:"",editDeadline:"",publishDate:isoOf(new Date(y,m,1)),notes:"",link:""});
+    setTab("dash");setOpen(c.id);
+  };
   // Only fires once a collab is both in the stage "Send invoice" AND sitting
   // in the Completed column -- either changing alone isn't enough.
   const maybeInvoiceTask=c=>{
@@ -514,7 +522,7 @@ function App(){
     api.add("tasks",{id:taskId,group:"Content",title,meta,done:false,collabId:d.collabId});
   };
 
-  const common={st,api,dkk,brandOf,collabDate,startDrag,endDrag,allowDrop,leaveDrop,dropTarget,setDropTarget,drag,askDelete,setOpen,setOpenContact,setTab,deleteCollab,newCollab,setStage,setKanban,addContentTask};
+  const common={st,api,dkk,brandOf,collabDate,startDrag,endDrag,allowDrop,leaveDrop,dropTarget,setDropTarget,drag,askDelete,setOpen,setOpenContact,setTab,deleteCollab,newCollab,newDealInMonth,setStage,setKanban,addContentTask};
 
   const sync = st.mode==="loading"?"Loading…":st.mode==="local"?"Example data · not saved":st.mode==="offline"?"Read-only":(st.saving?"Saving…":"Saved");
 
@@ -544,6 +552,7 @@ function App(){
     </header>
 
     ${tab==="dash"&&html`<${Dashboard} ...${common} period=${period} setPeriod=${setPeriod} showFinance=${showFinance} showToday=${showToday}
+        todoView=${todoView} setTodoView=${setTodoView}
         goal=${goal} inPeriod=${inPeriod} monthRevenue=${monthRevenue} t=${t} prev=${prev} next=${next}/>`}
     ${tab==="cal"&&html`<${Calendar} ...${common} calMode=${calMode} setCalMode=${setCalMode} cursor=${cursor} setCursor=${setCursor}
         sidebar=${sidebar} setSidebar=${setSidebar} openQuick=${iso=>{setQuick(iso);setQuickTitle("")}}/>`}
@@ -600,7 +609,7 @@ function App(){
 
 /* ---------- Dashboard ---------- */
 function Dashboard(p){
-  const {st,api,dkk,collabDate,period,setPeriod,showFinance,showToday,goal,inPeriod,monthRevenue,t,prev,next,setOpen,askDelete}=p;
+  const {st,api,dkk,collabDate,period,setPeriod,showFinance,showToday,todoView,setTodoView,goal,inPeriod,monthRevenue,t,prev,next,setOpen,askDelete}=p;
   const {collabs,deliverables,tasks}=st;
   // KPI math stays on a single date per collab (matches monthRevenue) so a
   // collab is never counted toward more than one period's revenue at once.
@@ -736,10 +745,13 @@ function Dashboard(p){
 
     ${showToday&&html`<section className="todo">
       <div style=${{display:"flex",alignItems:"baseline",gap:12,marginBottom:14,flexWrap:"wrap"}}>
-        <h2 style=${{fontSize:22,fontWeight:700,margin:0,letterSpacing:"-.035em"}}>To do</h2>
-        <span style=${{fontSize:14,color:"var(--muted)"}}>${openTasks}${openTasks===1?" thing needs":" things need"} your attention</span>
+        <h2 style=${{fontSize:22,fontWeight:700,margin:0,letterSpacing:"-.035em"}}>${todoView==="deals"?"Deals scheduled":"To do"}</h2>
+        ${todoView==="todo"&&html`<span style=${{fontSize:14,color:"var(--muted)"}}>${openTasks}${openTasks===1?" thing needs":" things need"} your attention</span>`}
+        <div className="pills" style=${{marginLeft:"auto",padding:4}}>
+          ${[["todo","To do"],["deals","Deals scheduled"]].map(([k,l])=>html`<button key=${k} type="button" className=${"pill"+(todoView===k?" on":"")} onClick=${()=>setTodoView(k)}>${l}</button>`)}
+        </div>
       </div>
-      <div className="todo-grid">
+      ${todoView==="deals"?html`<${DealsBoard} ...${p}/>`:html`<div className="todo-grid">
         ${TASK_GROUPS.map(group=>{const items=tasks.filter(x=>x.group===group&&!x.archived);return html`<div key=${group}>
           <div style=${{fontSize:12,fontWeight:500,letterSpacing:".14em",textTransform:"uppercase",color:"var(--muted)",marginBottom:10}}>${group}</div>
           ${items.map(x=>html`<div key=${x.id} className="task" draggable="true" style=${{cursor:"grab"}}
@@ -765,7 +777,7 @@ function Dashboard(p){
           <button type="button" className="add-row" onClick=${()=>api.add("tasks",{id:uid("t"),group,title:"New task",meta:"",done:false,collabId:""})}>
             <span className="add-dot">+</span><span>Add task</span></button>
         </div>`})}
-      </div>
+      </div>`}
     </section>`}
 
     <section className="kanban">
@@ -821,6 +833,72 @@ function KanbanCard(p){
   </article>`;
 }
 
+/* ---------- Deals board: one card per deliverable, in a rolling 5-month
+   board (today's month + next 4). Shared by the Calendar tab's "Deals"
+   pill and the Dashboard's "Deals scheduled" to-do toggle. ---------- */
+function DealsBoard(p){
+  const {st,api,dkk,setOpen,setTab,askDelete,drag,startDrag,endDrag,allowDrop,leaveDrop,dropTarget,setDropTarget,newDealInMonth}=p;
+  const {deliverables,collabs}=st;
+  const openCollab=id=>{setTab("dash");setOpen(id)};
+  const dealMonths=[];
+  {const td=parse(TODAY);for(let i=0;i<5;i++){const d=new Date(td.getFullYear(),td.getMonth()+i,1);dealMonths.push({y:d.getFullYear(),m:d.getMonth(),label:MONTHS[d.getMonth()]+" "+d.getFullYear()})}}
+  const perReel=d=>{
+    const c=collabs.find(x=>x.id===d.collabId);if(!c)return 0;
+    const sibs=deliverables.filter(x=>x.collabId===c.id).length||1;
+    return Math.round(dkk(c)/sibs);
+  };
+  const dropOnDealMonth=(y,m)=>e=>{
+    e.preventDefault();const d=drag.current;setDropTarget(null);if(!d||d.kind!=="deliverable")return;
+    const item=deliverables.find(x=>x.id===d.id);
+    const daysInMonth=new Date(y,m+1,0).getDate();
+    const day=item&&item.publishDate?Math.min(parse(item.publishDate).getDate(),daysInMonth):1;
+    api.patch("deliverables",d.id,{publishDate:isoOf(new Date(y,m,day)),status:item&&item.status==="Published"?"Published":"Scheduled"},0);
+    drag.current=null;
+  };
+
+  return html`<div className="grid-scroll">
+    <div style=${{display:"grid",gridTemplateColumns:"repeat(5,minmax(220px,1fr))",gap:12,minWidth:1120}}>
+      ${dealMonths.map(mo=>{
+        const items=deliverables.filter(d=>{if(!d.publishDate)return false;const dd=parse(d.publishDate);return dd.getFullYear()===mo.y&&dd.getMonth()===mo.m});
+        const key="deal:"+mo.y+"-"+mo.m;
+        return html`<div key=${mo.label} className=${"col"+(dropTarget===key?" hot":"")} onDragOver=${allowDrop(key)} onDragLeave=${leaveDrop(key)} onDrop=${dropOnDealMonth(mo.y,mo.m)}>
+          <div style=${{display:"flex",alignItems:"baseline",gap:9,padding:"0 2px 12px"}}>
+            <h3 style=${{fontSize:14,fontWeight:600,margin:0,letterSpacing:"-.018em"}}>${mo.label}</h3>
+            <span className="num" style=${{fontSize:12,color:"var(--faint)"}}>${items.length}</span>
+            <span className="num" style=${{marginLeft:"auto",fontSize:12,color:"var(--ink-2)"}}>${kr(items.reduce((a,d)=>a+perReel(d),0))}</span>
+          </div>
+          <div style=${{display:"flex",flexDirection:"column",gap:10}}>
+            ${items.length===0&&html`<div className="empty-drop">Drag a reel here</div>`}
+            ${items.map(d=>{
+              const c=collabs.find(x=>x.id===d.collabId);
+              if(!c)return "";
+              const sibs=deliverables.filter(x=>x.collabId===c.id).length||1;
+              return html`<article key=${d.id} className="kcard" draggable="true" onDragStart=${startDrag("deliverable",d.id)} onDragEnd=${endDrag} onClick=${()=>openCollab(c.id)}>
+                <div style=${{display:"flex",alignItems:"baseline",gap:8}}>
+                  <span style=${{fontSize:14,fontWeight:600,letterSpacing:"-.02em",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>${c.brand}</span>
+                  <span style=${{marginLeft:"auto",display:"flex",alignItems:"baseline",gap:3}}>
+                    <input type="number" aria-label="Price" className="num" value=${c.price} onClick=${stop} onChange=${val(v=>api.patch("collabs",c.id,{price:Number(v)||0}))}
+                      style=${{width:64,textAlign:"right",background:"transparent",border:0,borderRadius:6,padding:"1px 3px",fontSize:14,fontWeight:600}}/>
+                    <select aria-label="Currency" value=${c.currency} onClick=${stop} onChange=${val(v=>api.patch("collabs",c.id,{currency:v},0))} style=${{background:"transparent",border:0,fontSize:11,color:"var(--muted)"}}><${Options} list=${CURRENCIES}/></select>
+                  </span>
+                </div>
+                <div className="num" style=${{fontSize:11,color:"var(--faint)",textAlign:"right"}}>${kr(Math.round(dkk(c)/sibs))} per reel</div>
+                <input aria-label="Deliverable name" className="quiet" value=${d.name} onClick=${stop} onChange=${val(v=>api.patch("deliverables",d.id,{name:v}))} style=${{display:"block",width:"100%",fontSize:12.5,margin:"6px 0 0",marginLeft:-4,padding:"1px 4px"}}/>
+                <div style=${{display:"flex",alignItems:"center",gap:6,marginTop:8,paddingTop:8,borderTop:"1px solid var(--line-2)"}}>
+                  <select aria-label="Platform" value=${d.platform} onClick=${stop} onChange=${val(v=>api.patch("deliverables",d.id,{platform:v},0))} style=${{border:0,background:"transparent",fontSize:11,color:"var(--muted)"}}><${Options} list=${PLATFORMS}/></select>
+                  <select aria-label="Status" value=${d.status} onClick=${stop} onChange=${val(v=>api.patch("deliverables",d.id,{status:v},0))} style=${{border:0,background:"transparent",fontSize:11,color:"var(--muted)",marginLeft:"auto"}}><${Options} list=${DSTATUS}/></select>
+                  <button type="button" className="x" style=${{width:18,height:18,fontSize:11}} aria-label="Delete deliverable" onClick=${e=>{e.stopPropagation();askDelete("Delete this deliverable?","“"+d.name+"” will be removed.",()=>api.remove([["deliverables",d.id],["tasks","cd-"+d.id]]))}}>✕</button>
+                </div>
+              </article>`;
+            })}
+            <button type="button" className="add-collab" onClick=${()=>newDealInMonth(mo.y,mo.m)}>+ Add deal</button>
+          </div>
+        </div>`;
+      })}
+    </div>
+  </div>`;
+}
+
 /* ---------- Calendar ---------- */
 function Calendar(p){
   const {st,api,brandOf,dkk,calMode,setCalMode,cursor,setCursor,sidebar,setSidebar,openQuick,setOpen,setTab,askDelete,drag,setDropTarget,dropTarget}=p;
@@ -840,24 +918,6 @@ function Calendar(p){
     e.preventDefault();const d=drag.current;setDropTarget(null);if(!d)return;
     if(d.kind==="deliverable")api.patch("deliverables",d.id,{publishDate:""},0);
     if(d.kind==="idea")api.patch("ideas",d.id,{scheduledDate:""},0);
-    drag.current=null;
-  };
-
-  // "Deals" mode: one card per deliverable, price split across a collab's
-  // deliverables, in a rolling 5-month board (today's month + next 4).
-  const dealMonths=[];
-  {const td=parse(TODAY);for(let i=0;i<5;i++){const d=new Date(td.getFullYear(),td.getMonth()+i,1);dealMonths.push({y:d.getFullYear(),m:d.getMonth(),label:MONTHS[d.getMonth()]+" "+d.getFullYear()})}}
-  const perReel=d=>{
-    const c=collabs.find(x=>x.id===d.collabId);if(!c)return 0;
-    const sibs=deliverables.filter(x=>x.collabId===c.id).length||1;
-    return Math.round(dkk(c)/sibs);
-  };
-  const dropOnDealMonth=(y,m)=>e=>{
-    e.preventDefault();const d=drag.current;setDropTarget(null);if(!d||d.kind!=="deliverable")return;
-    const item=deliverables.find(x=>x.id===d.id);
-    const daysInMonth=new Date(y,m+1,0).getDate();
-    const day=item&&item.publishDate?Math.min(parse(item.publishDate).getDate(),daysInMonth):1;
-    api.patch("deliverables",d.id,{publishDate:isoOf(new Date(y,m,day)),status:item&&item.status==="Published"?"Published":"Scheduled"},0);
     drag.current=null;
   };
 
@@ -898,34 +958,7 @@ function Calendar(p){
         </div>
       </div>
 
-      ${calMode==="Deals"?html`<div className="grid-scroll">
-        <div style=${{display:"grid",gridTemplateColumns:"repeat(5,minmax(220px,1fr))",gap:12,minWidth:1120}}>
-          ${dealMonths.map(mo=>{
-            const items=deliverables.filter(d=>{if(!d.publishDate)return false;const dd=parse(d.publishDate);return dd.getFullYear()===mo.y&&dd.getMonth()===mo.m});
-            const key="deal:"+mo.y+"-"+mo.m;
-            return html`<div key=${mo.label} className=${"col"+(dropTarget===key?" hot":"")} onDragOver=${p.allowDrop(key)} onDragLeave=${p.leaveDrop(key)} onDrop=${dropOnDealMonth(mo.y,mo.m)}>
-              <div style=${{display:"flex",alignItems:"baseline",gap:9,padding:"0 2px 12px"}}>
-                <h3 style=${{fontSize:14,fontWeight:600,margin:0,letterSpacing:"-.018em"}}>${mo.label}</h3>
-                <span className="num" style=${{fontSize:12,color:"var(--faint)"}}>${items.length}</span>
-                <span className="num" style=${{marginLeft:"auto",fontSize:12,color:"var(--ink-2)"}}>${kr(items.reduce((a,d)=>a+perReel(d),0))}</span>
-              </div>
-              <div style=${{display:"flex",flexDirection:"column",gap:10}}>
-                ${items.length===0&&html`<div className="empty-drop">Drag a reel here</div>`}
-                ${items.map(d=>html`<article key=${d.id} className="kcard" draggable="true" onDragStart=${p.startDrag("deliverable",d.id)} onDragEnd=${p.endDrag} onClick=${()=>openCollab(d.collabId)}>
-                  <div style=${{display:"flex",alignItems:"baseline",gap:8}}>
-                    <span style=${{fontSize:14,fontWeight:600,letterSpacing:"-.02em",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>${brandOf(d.collabId)}</span>
-                    <span className="num" style=${{marginLeft:"auto",fontSize:13,fontWeight:600}}>${kr(perReel(d))}</span>
-                  </div>
-                  <p className="clamp" style=${{margin:"6px 0 0"}}>${d.name}</p>
-                  <div style=${{display:"flex",alignItems:"center",gap:10,marginTop:10,paddingTop:9,borderTop:"1px solid var(--line-2)",fontSize:11.5,color:"var(--muted)"}}>
-                    <span>${d.platform}</span><span style=${{marginLeft:"auto"}}>${d.status}</span>
-                  </div>
-                </article>`)}
-              </div>
-            </div>`;
-          })}
-        </div>
-      </div>`:calMode!=="List"?html`<div className="card grid-scroll" style=${{padding:"16px 18px 18px"}}>
+      ${calMode==="Deals"?html`<${DealsBoard} ...${p}/>`:calMode!=="List"?html`<div className="card grid-scroll" style=${{padding:"16px 18px 18px"}}>
         <div className="grid7" style=${{marginBottom:8}}>${DAYNAMES.map(d=>html`<span key=${d} className="kicker" style=${{paddingLeft:4}}>${d}</span>`)}</div>
         <div className="grid7">
           ${cells.map(c=>html`<div key=${c.iso} className=${"cell"+(dropTarget==="date:"+c.iso?" hot":"")}
