@@ -468,7 +468,29 @@ function App(){
     if(period==="Next month")return d.getFullYear()===next.getFullYear()&&d.getMonth()===next.getMonth();
     return d.getFullYear()===prev.getFullYear()&&d.getMonth()===prev.getMonth();
   };
-  const monthRevenue=(y,m,statuses)=>collabs.filter(c=>{const d=parse(collabDate(c));return d&&d.getFullYear()===y&&d.getMonth()===m&&statuses.includes(c.finStatus)}).reduce((a,c)=>a+dkk(c),0);
+  // Matches the Deals board's own math: a collab's price is split evenly
+  // across its deliverables, and each reel counts toward the month it's
+  // actually dated for -- not the collab's single earliest date. A collab
+  // with no deliverables yet falls back to collabDate() so it still counts
+  // somewhere.
+  const monthRevenue=(y,m,statuses)=>{
+    let total=0;
+    collabs.filter(c=>statuses.includes(c.finStatus)).forEach(c=>{
+      const dels=deliverables.filter(d=>d.collabId===c.id);
+      if(dels.length===0){
+        const d=parse(collabDate(c));
+        if(d&&d.getFullYear()===y&&d.getMonth()===m)total+=dkk(c);
+        return;
+      }
+      const perReelVal=dkk(c)/dels.length;
+      dels.forEach(d=>{
+        if(!d.publishDate)return;
+        const pd=parse(d.publishDate);
+        if(pd.getFullYear()===y&&pd.getMonth()===m)total+=perReelVal;
+      });
+    });
+    return Math.round(total);
+  };
 
   const askDelete=(title,detail,onYes)=>setConfirm({title,detail,onYes});
   const startDrag=(kind,id)=>e=>{drag.current={kind,id};if(e.dataTransfer){e.dataTransfer.effectAllowed="move";try{e.dataTransfer.setData("text/plain",id)}catch(err){}}};
@@ -848,9 +870,10 @@ function KanbanCard(p){
 function DealsBoard(p){
   const {st,api,dkk,setOpen,setTab,askDelete,drag,startDrag,endDrag,allowDrop,leaveDrop,dropTarget,setDropTarget,newDealInMonth}=p;
   const {deliverables,collabs}=st;
+  const [cursor,setCursor]=useState(0);
   const openCollab=id=>{setTab("dash");setOpen(id)};
   const dealMonths=[];
-  {const td=parse(TODAY);for(let i=0;i<5;i++){const d=new Date(td.getFullYear(),td.getMonth()+i,1);dealMonths.push({y:d.getFullYear(),m:d.getMonth(),label:MONTHS[d.getMonth()]+" "+d.getFullYear()})}}
+  {const td=parse(TODAY);for(let i=0;i<5;i++){const d=new Date(td.getFullYear(),td.getMonth()+cursor+i,1);dealMonths.push({y:d.getFullYear(),m:d.getMonth(),label:MONTHS[d.getMonth()]+" "+d.getFullYear()})}}
   const perReel=d=>{
     const c=collabs.find(x=>x.id===d.collabId);if(!c)return 0;
     const sibs=deliverables.filter(x=>x.collabId===c.id).length||1;
@@ -865,7 +888,13 @@ function DealsBoard(p){
     drag.current=null;
   };
 
-  return html`<div className="grid-scroll">
+  return html`<div>
+    <div style=${{display:"flex",gap:6,marginBottom:12}}>
+      <button type="button" className="nav-btn" aria-label="Earlier months" onClick=${()=>setCursor(c=>c-1)}>←</button>
+      <button type="button" className="nav-btn" style=${{width:"auto",padding:"0 13px",fontSize:12.5}} onClick=${()=>setCursor(0)}>Today</button>
+      <button type="button" className="nav-btn" aria-label="Later months" onClick=${()=>setCursor(c=>c+1)}>→</button>
+    </div>
+    <div className="grid-scroll">
     <div style=${{display:"grid",gridTemplateColumns:"repeat(5,minmax(220px,1fr))",gap:12,minWidth:1120}}>
       ${dealMonths.map(mo=>{
         const items=deliverables.filter(d=>{if(!d.publishDate)return false;const dd=parse(d.publishDate);return dd.getFullYear()===mo.y&&dd.getMonth()===mo.m});
@@ -904,6 +933,7 @@ function DealsBoard(p){
           </div>
         </div>`;
       })}
+    </div>
     </div>
   </div>`;
 }
