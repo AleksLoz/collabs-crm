@@ -636,9 +636,6 @@ function App(){
 function Dashboard(p){
   const {st,api,dkk,collabDate,period,setPeriod,showFinance,showToday,boardView,setBoardView,goal,inPeriod,monthRevenue,t,prev,next,setOpen,askDelete}=p;
   const {collabs,deliverables,tasks}=st;
-  // KPI math stays on a single date per collab (matches monthRevenue) so a
-  // collab is never counted toward more than one period's revenue at once.
-  const scoped=collabs.filter(c=>inPeriod(collabDate(c)));
   // The board is a look-ahead view, not an accounting one: a collab with
   // deliverables spanning two months should show up under both.
   const boardScoped=collabs.filter(c=>{
@@ -647,11 +644,24 @@ function Dashboard(p){
     const candidates=dates.length?dates:[collabDate(c)];
     return candidates.some(inPeriod);
   });
-  const won=scoped.filter(c=>c.finStatus!=="Potential");
-  const secured=won.reduce((a,c)=>a+dkk(c),0);
+  // Same per-reel, per-period math as monthRevenue/the Deals board: a
+  // collab's price splits across its deliverables, and only a deliverable
+  // actually dated inside the selected period counts.
+  const periodRevenue=pred=>{
+    let total=0;
+    collabs.filter(pred).forEach(c=>{
+      const dels=deliverables.filter(d=>d.collabId===c.id);
+      if(dels.length===0)return;
+      const perReelVal=Math.round(dkk(c)/dels.length);
+      dels.forEach(d=>{if(d.publishDate&&inPeriod(d.publishDate))total+=perReelVal});
+    });
+    return total;
+  };
+  const periodCollabCount=pred=>collabs.filter(c=>pred(c)&&deliverables.some(d=>d.collabId===c.id&&d.publishDate&&inPeriod(d.publishDate))).length;
+  const secured=periodRevenue(c=>c.finStatus!=="Potential");
   const pct=goal>0?Math.round(secured/goal*100):0;
-  const stephList=scoped.filter(c=>c.owner==="Steph");
-  const stephCut=stephList.reduce((a,c)=>a+dkk(c),0)*STEPH_CUT;
+  const stephCollabCount=periodCollabCount(c=>c.owner==="Steph");
+  const stephCut=periodRevenue(c=>c.owner==="Steph")*STEPH_CUT;
   const bookedTotal=collabs.filter(c=>c.finStatus==="Booked").reduce((a,c)=>a+dkk(c),0);
   const bookedThisMonth=monthRevenue(t.getFullYear(),t.getMonth(),["Booked"]);
   const bookedLastMonth=monthRevenue(prev.getFullYear(),prev.getMonth(),["Booked"]);
@@ -669,7 +679,7 @@ function Dashboard(p){
     {label:"Booked in total",value:kr(bookedTotal),delta:collabs.filter(c=>c.finStatus==="Booked").length+" booked collabs",dc:"var(--ink-2)",sub:"All-time, across every month"},
     {label:"Booked this month",value:kr(bookedThisMonth),delta:momBooked===null?"No comparison":(momBooked>=0?"+":"")+momBooked+"% vs "+MONTHS[prev.getMonth()],dc:momBooked!==null&&momBooked<0?"var(--muted)":"var(--ink)",
       sub:bookedSubParts.length?bookedSubParts.join(" · "):"Nothing paid or invoiced yet"},
-    {label:"Steph's cut",value:kr(stephCut),delta:stephList.length+" collabs",dc:"var(--ink-2)",sub:"10% of Steph's collabs"}
+    {label:"Steph's cut",value:kr(stephCut),delta:stephCollabCount+" collabs",dc:"var(--ink-2)",sub:"10% of Steph's collabs"}
   ];
 
   // chart -- runs from August (the most recent one on or before today)
