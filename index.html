@@ -478,7 +478,14 @@ function App(){
     collabs.filter(c=>statuses.includes(c.finStatus)).forEach(c=>{
       const dels=deliverables.filter(d=>d.collabId===c.id);
       if(dels.length===0){
-        const d=parse(collabDate(c));
+        // No TODAY fallback here (unlike collabDate(), used for board
+        // sorting elsewhere): a collab with no deliverables and no explicit
+        // date shouldn't silently land in "whatever month it is right now"
+        // -- it isn't visible on the Deals board either, so it shouldn't
+        // count toward any month's revenue.
+        const iso=c.endDate||c.startDate;
+        if(!iso)return;
+        const d=parse(iso);
         if(d&&d.getFullYear()===y&&d.getMonth()===m)total+=dkk(c);
         return;
       }
