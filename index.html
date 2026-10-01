@@ -415,7 +415,7 @@ function App(){
   const [period,setPeriod]=useState("This month");
   const [showFinance,setShowFinance]=useState(()=>lsGet("collabs.fin","1")==="1");
   const [showToday,setShowToday]=useState(()=>lsGet("collabs.todo","1")==="1");
-  const [todoView,setTodoView]=useState(()=>lsGet("collabs.todoView","todo"));
+  const [boardView,setBoardView]=useState(()=>lsGet("collabs.boardView","pipeline"));
   const [open,setOpen]=useState(null);
   const [openContact,setOpenContact]=useState(null);
   const [confirm,setConfirm]=useState(null);
@@ -435,7 +435,7 @@ function App(){
   useEffect(()=>lsSet("collabs.tab",tab),[tab]);
   useEffect(()=>lsSet("collabs.fin",showFinance?"1":"0"),[showFinance]);
   useEffect(()=>lsSet("collabs.todo",showToday?"1":"0"),[showToday]);
-  useEffect(()=>lsSet("collabs.todoView",todoView),[todoView]);
+  useEffect(()=>lsSet("collabs.boardView",boardView),[boardView]);
   useEffect(()=>{
     const onKey=e=>{if(e.key==="Escape"){if(confirm)setConfirm(null);else if(quick)setQuick(null);else if(login)setLogin(false);else if(openContact)setOpenContact(null);else if(open)setOpen(null)}};
     window.addEventListener("keydown",onKey);return()=>window.removeEventListener("keydown",onKey);
@@ -486,7 +486,7 @@ function App(){
   const newCollab=(kanban,contact)=>{
     let ct=contact;
     if(!ct)ct=api.add("contacts",{id:uid("c"),brand:"New brand",person:"",email:"",website:"",social:"",folder:"",lastContactDate:TODAY,followUpDate:"",status:"Responded"});
-    const c=api.add("collabs",{id:uid("k"),contactId:ct.id,brand:ct.brand,owner:"Aleksandra",price:0,currency:"DKK",finStatus:kanban==="Potential"?"Potential":"Booked",stage:kanban==="Completed"?"Done":kanban==="Ongoing"?"Order products":"Need to respond",kanban:kanban||"Potential",pitch:"",notes:"",folder:"",contract:"",startDate:"",endDate:"",invoice:""});
+    const c=api.add("collabs",{id:uid("k"),contactId:ct.id,brand:ct.brand,owner:"Aleksandra",price:0,currency:"DKK",finStatus:kanban==="Potential"?"Potential":kanban==="Completed"?"Paid":"Booked",stage:kanban==="Completed"?"Done":kanban==="Ongoing"?"Order products":"Need to respond",kanban:kanban||"Potential",pitch:"",notes:"",folder:"",contract:"",startDate:"",endDate:"",invoice:""});
     setTab("dash");setOpen(c.id);
   };
   const newDealInMonth=(y,m)=>{
@@ -504,8 +504,9 @@ function App(){
     }
   };
   const setStage=(c,stage)=>{
-    api.patch("collabs",c.id,{stage},0);
-    maybeInvoiceTask({...c,stage});
+    const fields=stage==="Send invoice"?{stage,kanban:"Completed"}:{stage};
+    api.patch("collabs",c.id,fields,0);
+    maybeInvoiceTask({...c,...fields});
   };
   const setKanban=(c,kanban)=>{
     api.patch("collabs",c.id,{kanban},0);
@@ -552,7 +553,7 @@ function App(){
     </header>
 
     ${tab==="dash"&&html`<${Dashboard} ...${common} period=${period} setPeriod=${setPeriod} showFinance=${showFinance} showToday=${showToday}
-        todoView=${todoView} setTodoView=${setTodoView}
+        boardView=${boardView} setBoardView=${setBoardView}
         goal=${goal} inPeriod=${inPeriod} monthRevenue=${monthRevenue} t=${t} prev=${prev} next=${next}/>`}
     ${tab==="cal"&&html`<${Calendar} ...${common} calMode=${calMode} setCalMode=${setCalMode} cursor=${cursor} setCursor=${setCursor}
         sidebar=${sidebar} setSidebar=${setSidebar} openQuick=${iso=>{setQuick(iso);setQuickTitle("")}}/>`}
@@ -609,7 +610,7 @@ function App(){
 
 /* ---------- Dashboard ---------- */
 function Dashboard(p){
-  const {st,api,dkk,collabDate,period,setPeriod,showFinance,showToday,todoView,setTodoView,goal,inPeriod,monthRevenue,t,prev,next,setOpen,askDelete}=p;
+  const {st,api,dkk,collabDate,period,setPeriod,showFinance,showToday,boardView,setBoardView,goal,inPeriod,monthRevenue,t,prev,next,setOpen,askDelete}=p;
   const {collabs,deliverables,tasks}=st;
   // KPI math stays on a single date per collab (matches monthRevenue) so a
   // collab is never counted toward more than one period's revenue at once.
@@ -624,10 +625,7 @@ function Dashboard(p){
   });
   const won=scoped.filter(c=>c.finStatus!=="Potential");
   const secured=won.reduce((a,c)=>a+dkk(c),0);
-  const monthsLeft=12-t.getMonth();
-  const yearGoal=goal*monthsLeft;
-  const effectiveGoal=period==="This year"?yearGoal:goal;
-  const pct=effectiveGoal>0?Math.round(secured/effectiveGoal*100):0;
+  const pct=goal>0?Math.round(secured/goal*100):0;
   const stephList=scoped.filter(c=>c.owner==="Steph");
   const stephCut=stephList.reduce((a,c)=>a+dkk(c),0)*STEPH_CUT;
   const bookedTotal=collabs.filter(c=>c.finStatus==="Booked").reduce((a,c)=>a+dkk(c),0);
@@ -723,7 +721,7 @@ function Dashboard(p){
         </div>
 
         <div className="card goal-card">
-          <div className="kicker" style=${{alignSelf:"stretch"}}>${period==="This year"?"Booked vs year-end goal":"Booked vs goal"}</div>
+          <div className="kicker" style=${{alignSelf:"stretch"}}>Booked vs goal</div>
           <div style=${{position:"relative",width:158,height:158,margin:"18px 0 14px"}}>
             <svg viewBox="0 0 80 80" width="158" height="158" style=${{display:"block",transform:"rotate(-90deg)"}} aria-hidden="true">
               <circle cx="40" cy="40" r="33" fill="none" stroke="var(--hot)" strokeWidth="7"></circle>
@@ -737,23 +735,19 @@ function Dashboard(p){
           <div style=${{alignSelf:"stretch",paddingTop:14,borderTop:"1px solid var(--line)",display:"flex",alignItems:"baseline",gap:4}}>
             <label htmlFor="goal-in" style=${{fontSize:12.5,color:"var(--ink-2)"}}>of</label>
             <input id="goal-in" type="number" step="1000" min="0" className="goal-input num" title="Monthly goal in DKK" value=${goal} onChange=${val(v=>api.settings({goal:Number(v)||0}))}/>
-            <span style=${{fontSize:12.5,color:"var(--ink-2)"}}>kr${period==="This year"?"/mo":""}</span>
-            <span className="num" style=${{marginLeft:"auto",fontSize:12.5,fontWeight:500,whiteSpace:"nowrap"}}>${pct>=100?"Goal reached":kr(effectiveGoal-secured)+" to go"}</span>
+            <span style=${{fontSize:12.5,color:"var(--ink-2)"}}>kr</span>
+            <span className="num" style=${{marginLeft:"auto",fontSize:12.5,fontWeight:500,whiteSpace:"nowrap"}}>${pct>=100?"Goal reached":kr(goal-secured)+" to go"}</span>
           </div>
-          ${period==="This year"&&html`<div style=${{alignSelf:"stretch",marginTop:8,fontSize:11,color:"var(--muted)"}}>${kr(goal)} × ${monthsLeft} months left in ${t.getFullYear()} = ${kr(yearGoal)}</div>`}
         </div>
       </section>
     </div>`}
 
     ${showToday&&html`<section className="todo">
       <div style=${{display:"flex",alignItems:"baseline",gap:12,marginBottom:14,flexWrap:"wrap"}}>
-        <h2 style=${{fontSize:22,fontWeight:700,margin:0,letterSpacing:"-.035em"}}>${todoView==="deals"?"Deals scheduled":"To do"}</h2>
-        ${todoView==="todo"&&html`<span style=${{fontSize:14,color:"var(--muted)"}}>${openTasks}${openTasks===1?" thing needs":" things need"} your attention</span>`}
-        <div className="pills" style=${{marginLeft:"auto",padding:4}}>
-          ${[["todo","To do"],["deals","Deals scheduled"]].map(([k,l])=>html`<button key=${k} type="button" className=${"pill"+(todoView===k?" on":"")} onClick=${()=>setTodoView(k)}>${l}</button>`)}
-        </div>
+        <h2 style=${{fontSize:22,fontWeight:700,margin:0,letterSpacing:"-.035em"}}>To do</h2>
+        <span style=${{fontSize:14,color:"var(--muted)"}}>${openTasks}${openTasks===1?" thing needs":" things need"} your attention</span>
       </div>
-      ${todoView==="deals"?html`<${DealsBoard} ...${p}/>`:html`<div className="todo-grid">
+      <div className="todo-grid">
         ${TASK_GROUPS.map(group=>{const items=tasks.filter(x=>x.group===group&&!x.archived);return html`<div key=${group}>
           <div style=${{fontSize:12,fontWeight:500,letterSpacing:".14em",textTransform:"uppercase",color:"var(--muted)",marginBottom:10}}>${group}</div>
           ${items.map(x=>html`<div key=${x.id} className="task" draggable="true" style=${{cursor:"grab"}}
@@ -762,7 +756,11 @@ function Dashboard(p){
                 const arr=items.slice();const from=arr.findIndex(t=>t.id===d.id);const to=arr.findIndex(t=>t.id===x.id);
                 if(from>-1&&to>-1){const[moved]=arr.splice(from,1);arr.splice(to,0,moved);arr.forEach((t,i)=>api.patch("tasks",t.id,{createdAt:i},0))}
               }p.drag.current=null}}>
-            <button type="button" className=${"check"+(x.done?" done":"")} aria-label=${x.done?"Mark as not done":"Mark as done"} onClick=${()=>api.patch("tasks",x.id,{done:!x.done},0)}></button>
+            <button type="button" className=${"check"+(x.done?" done":"")} aria-label=${x.done?"Mark as not done":"Mark as done"} onClick=${()=>{
+              const nowDone=!x.done;
+              const autoArchive=nowDone&&x.id.startsWith("inv-");
+              api.patch("tasks",x.id,autoArchive?{done:nowDone,archived:true}:{done:nowDone},0);
+            }}></button>
             <div style=${{flex:1,minWidth:0}}>
               <input id=${"task-t-"+x.id} className="quiet" aria-label="Task" value=${x.title} onChange=${val(v=>api.patch("tasks",x.id,{title:v}))}
                 style=${{display:"block",width:"100%",fontSize:15,fontWeight:500,letterSpacing:"-.018em",color:x.done?"var(--muted)":"var(--ink)",textDecoration:x.done?"line-through":"none"}}/>
@@ -770,7 +768,7 @@ function Dashboard(p){
                 <input id=${"task-m-"+x.id} className="quiet" aria-label="Details" placeholder="Add details" value=${x.meta} onChange=${val(v=>api.patch("tasks",x.id,{meta:v}))}
                   style=${{flex:1,minWidth:0,fontSize:13,color:x.done?"var(--dash-2)":"var(--muted)",textDecoration:x.done?"line-through":"none"}}/>
                 ${x.collabId&&st.collabs.some(c=>c.id===x.collabId)&&html`<button type="button" onClick=${()=>setOpen(x.collabId)} style=${{flex:"none",background:"transparent",border:0,padding:0,fontSize:11.5,color:"var(--muted)",textDecoration:"underline",textUnderlineOffset:2}}>Open</button>`}
-                ${x.done&&html`<button type="button" onClick=${()=>api.patch("tasks",x.id,{archived:true},0)} style=${{flex:"none",background:"transparent",border:0,padding:0,fontSize:11.5,color:"var(--muted)",textDecoration:"underline",textUnderlineOffset:2}}>Archive</button>`}
+                ${x.done&&!x.id.startsWith("inv-")&&html`<button type="button" onClick=${()=>api.patch("tasks",x.id,{archived:true},0)} style=${{flex:"none",background:"transparent",border:0,padding:0,fontSize:11.5,color:"var(--muted)",textDecoration:"underline",textUnderlineOffset:2}}>Archive</button>`}
               </div>
             </div>
             <button type="button" className="x" aria-label="Delete task" onClick=${()=>askDelete("Delete this task?","“"+x.title+"” will be removed from To do.",()=>api.remove([["tasks",x.id]]))}>✕</button>
@@ -779,13 +777,21 @@ function Dashboard(p){
           <button type="button" className="add-row" onClick=${()=>api.add("tasks",{id:uid("t"),group,title:"New task",meta:"",done:false,collabId:""})}>
             <span className="add-dot">+</span><span>Add task</span></button>
         </div>`})}
-      </div>`}
+      </div>
     </section>`}
 
-    <section className="kanban">
+    <section className="kanban-wrap">
+      <div style=${{display:"flex",alignItems:"center",gap:12,marginBottom:14,flexWrap:"wrap"}}>
+        <h2 style=${{fontSize:22,fontWeight:700,margin:0,letterSpacing:"-.035em"}}>${boardView==="deals"?"Deals by month":"Pipeline"}</h2>
+        <span style=${{fontSize:13,color:"var(--muted)"}}>${collabs.filter(c=>!c.archived).length} collaborations</span>
+        <div className="pills" style=${{marginLeft:"auto",padding:4}}>
+          ${[["pipeline","Pipeline"],["deals","Deals by month"]].map(([k,l])=>html`<button key=${k} type="button" className=${"pill"+(boardView===k?" on":"")} onClick=${()=>setBoardView(k)}>${l}</button>`)}
+        </div>
+      </div>
+      ${boardView==="deals"?html`<${DealsBoard} ...${p}/>`:html`<section className="kanban">
       ${KAN.map(col=>{
         const stagePriority=c=>c.stage==="Send a brief"||c.stage==="Need to respond"?0:c.stage==="Waiting on brand"?2:1;
-        const list=boardScoped.filter(c=>c.kanban===col).sort((a,b)=>stagePriority(a)-stagePriority(b));
+        const list=collabs.filter(c=>!c.archived&&c.kanban===col).sort((a,b)=>stagePriority(a)-stagePriority(b));
         return html`<div key=${col} className=${"col"+(p.dropTarget==="col:"+col?" hot":"")} onDragOver=${p.allowDrop("col:"+col)} onDragLeave=${p.leaveDrop("col:"+col)}
           onDrop=${e=>{e.preventDefault();const d=p.drag.current;p.setDropTarget(null);if(d&&d.kind==="collab"){const cc=p.st.collabs.find(x=>x.id===d.id);if(cc)p.setKanban(cc,col)}p.drag.current=null}}>
           <div style=${{display:"flex",alignItems:"baseline",gap:9,padding:"0 2px 12px"}}>
@@ -800,6 +806,7 @@ function Dashboard(p){
           </div>
         </div>`;
       })}
+      </section>`}
     </section>
   </div>`;
 }
