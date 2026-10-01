@@ -473,30 +473,25 @@ function App(){
   // actually dated for -- not the collab's single earliest date. A collab
   // with no deliverables yet falls back to collabDate() so it still counts
   // somewhere.
+  // Mirrors the Deals board exactly: a collab's price splits evenly across
+  // its deliverables, and only a deliverable with an actual publish date in
+  // (y,m) counts toward that month. A collab with no deliverables yet
+  // contributes to no month -- it still counts in "Booked in total" (which
+  // isn't date-based), just not here, so this can never disagree with what
+  // the board shows.
   const monthRevenue=(y,m,statuses)=>{
     let total=0;
     collabs.filter(c=>statuses.includes(c.finStatus)).forEach(c=>{
       const dels=deliverables.filter(d=>d.collabId===c.id);
-      if(dels.length===0){
-        // No TODAY fallback here (unlike collabDate(), used for board
-        // sorting elsewhere): a collab with no deliverables and no explicit
-        // date shouldn't silently land in "whatever month it is right now"
-        // -- it isn't visible on the Deals board either, so it shouldn't
-        // count toward any month's revenue.
-        const iso=c.endDate||c.startDate;
-        if(!iso)return;
-        const d=parse(iso);
-        if(d&&d.getFullYear()===y&&d.getMonth()===m)total+=dkk(c);
-        return;
-      }
-      const perReelVal=dkk(c)/dels.length;
+      if(dels.length===0)return;
+      const perReelVal=Math.round(dkk(c)/dels.length);
       dels.forEach(d=>{
         if(!d.publishDate)return;
         const pd=parse(d.publishDate);
         if(pd.getFullYear()===y&&pd.getMonth()===m)total+=perReelVal;
       });
     });
-    return Math.round(total);
+    return total;
   };
 
   const askDelete=(title,detail,onYes)=>setConfirm({title,detail,onYes});
@@ -677,12 +672,12 @@ function Dashboard(p){
     {label:"Steph's cut",value:kr(stephCut),delta:stephList.length+" collabs",dc:"var(--ink-2)",sub:"10% of Steph's collabs"}
   ];
 
-  // chart -- runs from September (the most recent one on or before today)
+  // chart -- runs from August (the most recent one on or before today)
   // through the current month, growing by one point each month that passes.
   const months=[];
   {
-    const startYear=t.getMonth()>=8?t.getFullYear():t.getFullYear()-1;
-    const span=(t.getFullYear()-startYear)*12+(t.getMonth()-8);
+    const startYear=t.getMonth()>=7?t.getFullYear():t.getFullYear()-1;
+    const span=(t.getFullYear()-startYear)*12+(t.getMonth()-7);
     for(let i=span;i>=0;i--){const d=new Date(t.getFullYear(),t.getMonth()-i,1);months.push({y:d.getFullYear(),m:d.getMonth(),label:MONTHS[d.getMonth()].slice(0,3)})}
   }
   const values=months.map(x=>monthRevenue(x.y,x.m,["Booked"]));
@@ -726,7 +721,7 @@ function Dashboard(p){
         <div className="card chart-card">
           <div style=${{display:"flex",alignItems:"baseline",gap:12,flexWrap:"wrap",marginBottom:2}}>
             <h3 style=${{fontSize:15,fontWeight:600,margin:0,letterSpacing:"-.018em"}}>Booked month after month</h3>
-            <span style=${{fontSize:12.5,color:"var(--muted)"}}>Since September, in DKK</span>
+            <span style=${{fontSize:12.5,color:"var(--muted)"}}>Since August, in DKK</span>
             <div style=${{marginLeft:"auto",display:"flex",alignItems:"baseline",gap:10}}>
               <span className="num" style=${{fontSize:20,fontWeight:700,letterSpacing:"-.03em",color:momBooked!==null&&momBooked<0?"var(--muted)":"var(--ink)"}}>${momBooked===null?"—":(momBooked>=0?"+":"")+momBooked+"%"}</span>
               <span style=${{fontSize:12.5,color:"var(--ink-2)"}}>${momBooked===null?"no comparison with "+MONTHS[prev.getMonth()]:kr(Math.abs(bookedThisMonth-bookedLastMonth))+(bookedThisMonth>=bookedLastMonth?" more than ":" less than ")+MONTHS[prev.getMonth()]}</span>
@@ -921,13 +916,15 @@ function DealsBoard(p){
               return html`<article key=${d.id} className="kcard" draggable="true" onDragStart=${startDrag("deliverable",d.id)} onDragEnd=${endDrag} onClick=${()=>openCollab(c.id)}>
                 <div style=${{display:"flex",alignItems:"baseline",gap:8}}>
                   <span style=${{fontSize:14,fontWeight:600,letterSpacing:"-.02em",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>${c.brand}</span>
-                  <span style=${{marginLeft:"auto",display:"flex",alignItems:"baseline",gap:3}}>
-                    <input type="number" aria-label="Price" className="num" value=${c.price} onClick=${stop} onChange=${val(v=>api.patch("collabs",c.id,{price:Number(v)||0}))}
-                      style=${{width:64,textAlign:"right",background:"transparent",border:0,borderRadius:6,padding:"1px 3px",fontSize:14,fontWeight:600}}/>
-                    <select aria-label="Currency" value=${c.currency} onClick=${stop} onChange=${val(v=>api.patch("collabs",c.id,{currency:v},0))} style=${{background:"transparent",border:0,fontSize:11,color:"var(--muted)"}}><${Options} list=${CURRENCIES}/></select>
-                  </span>
+                  <span className="num" style=${{marginLeft:"auto",fontSize:15,fontWeight:700,whiteSpace:"nowrap"}}>${kr(Math.round(dkk(c)/sibs))}</span>
                 </div>
-                <div className="num" style=${{fontSize:11,color:"var(--faint)",textAlign:"right"}}>${kr(Math.round(dkk(c)/sibs))} per reel</div>
+                <div style=${{display:"flex",alignItems:"baseline",justifyContent:"flex-end",gap:3,fontSize:11,color:"var(--faint)"}}>
+                  <span>of</span>
+                  <input type="number" aria-label="Total collab price" className="num" value=${c.price} onClick=${stop} onChange=${val(v=>api.patch("collabs",c.id,{price:Number(v)||0}))}
+                    style=${{width:56,textAlign:"right",background:"transparent",border:0,borderRadius:6,padding:"1px 2px",fontSize:11,color:"var(--faint)"}}/>
+                  <select aria-label="Currency" value=${c.currency} onClick=${stop} onChange=${val(v=>api.patch("collabs",c.id,{currency:v},0))} style=${{background:"transparent",border:0,fontSize:11,color:"var(--faint)"}}><${Options} list=${CURRENCIES}/></select>
+                  <span>total${sibs>1?" · "+sibs+" reels":""}</span>
+                </div>
                 <input aria-label="Deliverable name" className="quiet" value=${d.name} onClick=${stop} onChange=${val(v=>api.patch("deliverables",d.id,{name:v}))} style=${{display:"block",width:"100%",fontSize:12.5,margin:"6px 0 0",marginLeft:-4,padding:"1px 4px"}}/>
                 <div style=${{display:"flex",alignItems:"center",gap:6,marginTop:8,paddingTop:8,borderTop:"1px solid var(--line-2)"}}>
                   <select aria-label="Platform" value=${d.platform} onClick=${stop} onChange=${val(v=>api.patch("deliverables",d.id,{platform:v},0))} style=${{border:0,background:"transparent",fontSize:11,color:"var(--muted)"}}><${Options} list=${PLATFORMS}/></select>
