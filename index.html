@@ -220,7 +220,6 @@ const STEPH_CUT=0.1;
 const DAYNAMES=["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
 const RING=2*Math.PI*33;
-const TASK_GROUPS=["Respond","Content","Finance"];
 const COLS=["contacts","collabs","deliverables","ideas","tasks"];
 const DEFAULT_SETTINGS={goal:45000,rates:{DKK:1,EUR:7.46,USD:6.4}};
 
@@ -519,35 +518,16 @@ function App(){
     api.add("deliverables",{id:uid("d"),collabId:c.id,name:"New deliverable",platform:"Instagram",type:"Reel",status:"Idea",shootDate:"",editDeadline:"",publishDate:isoOf(new Date(y,m,1)),notes:"",link:""});
     setTab("dash");setOpen(c.id);
   };
-  // Only fires once a collab is both in the stage "Send invoice" AND sitting
-  // in the Completed column -- either changing alone isn't enough.
-  const maybeInvoiceTask=c=>{
-    if(c.stage==="Send invoice"&&c.kanban==="Completed"){
-      const taskId="inv-"+c.id;
-      if(!tasks.some(x=>x.id===taskId))api.add("tasks",{id:taskId,group:"Finance",title:"Send "+c.brand+" invoice",meta:kr(dkk(c))+" · ready to invoice",done:false,collabId:c.id,createdAt:0});
-    }
-  };
+  // Moving a collab to "Send invoice" also files it under Completed; the
+  // to-do list picks it up from there (see derived tasks in Dashboard).
   const setStage=(c,stage)=>{
-    const fields=stage==="Send invoice"?{stage,kanban:"Completed"}:{stage};
-    api.patch("collabs",c.id,fields,0);
-    maybeInvoiceTask({...c,...fields});
+    api.patch("collabs",c.id,stage==="Send invoice"?{stage,kanban:"Completed"}:{stage},0);
   };
   const setKanban=(c,kanban)=>{
     api.patch("collabs",c.id,{kanban},0);
-    maybeInvoiceTask({...c,kanban});
-  };
-  // Manual, one-shot -- clicking the arrow on a deliverable adds it to
-  // Content to-do. Deterministic "cd-<id>" means clicking twice is harmless.
-  const addContentTask=d=>{
-    const taskId="cd-"+d.id;
-    if(tasks.some(x=>x.id===taskId))return;
-    const c=collabs.find(x=>x.id===d.collabId);
-    const title=(c?c.brand:"")+" — "+d.name;
-    const meta=d.platform+" · "+d.type+(d.publishDate?" · publishes "+fmtDate(d.publishDate):"");
-    api.add("tasks",{id:taskId,group:"Content",title,meta,done:false,collabId:d.collabId});
   };
 
-  const common={st,api,dkk,brandOf,collabDate,startDrag,endDrag,allowDrop,leaveDrop,dropTarget,setDropTarget,drag,askDelete,setOpen,setOpenContact,setTab,deleteCollab,newCollab,newDealInMonth,setStage,setKanban,addContentTask};
+  const common={st,api,dkk,brandOf,collabDate,startDrag,endDrag,allowDrop,leaveDrop,dropTarget,setDropTarget,drag,askDelete,setOpen,setOpenContact,setTab,deleteCollab,newCollab,newDealInMonth,setStage,setKanban};
 
   const sync = st.mode==="loading"?"Loading…":st.mode==="local"?"Example data · not saved":st.mode==="offline"?"Read-only":(st.saving?"Saving…":"Saved");
 
@@ -704,7 +684,69 @@ function Dashboard(p){
   const area=path+" L"+pts[pts.length-1].x.toFixed(1)+","+bottom+" L"+pts[0].x.toFixed(1)+","+bottom+" Z";
   const goalTop=yFor(goal);
 
-  const openTasks=tasks.filter(x=>!x.done).length;
+  // ---- To do: Today / This week / Later ----
+  // Everything auto-generated here is computed from the shared deal data
+  // (collabs, deliverables, contacts) at render time, so every login sees
+  // the same list and nothing can be left over or duplicated. Only
+  // hand-written tasks are stored rows; their due date lives in the existing
+  // "group" column as an ISO date (legacy group names count as undated),
+  // which avoids needing a schema change.
+  const addDays=(iso,n)=>{const d=parse(iso);return isoOf(new Date(d.getFullYear(),d.getMonth(),d.getDate()+n))};
+  const WEEK_END=addDays(TODAY,6);
+  const BUCKETS=[["today","Today"],["week","This week"],["later","Later"]];
+  const bucketDate={today:TODAY,week:WEEK_END,later:addDays(TODAY,14)};
+  const bucketOf=iso=>!iso?"later":iso<=TODAY?"today":iso<=WEEK_END?"week":"later";
+  const taskDue=x=>/^\d{4}-\d{2}-\d{2}$/.test(x.group||"")?x.group:"";
+  const dueLabel=iso=>{
+    if(!iso||iso===TODAY)return "";
+    const base=parse(iso).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"});
+    return iso<TODAY?"Overdue · "+base:base;
+  };
+  const STAGE_TASKS={
+    "Need to respond":{kind:"Respond",verb:"Respond to",next:"Waiting on brand"},
+    "Send a brief":{kind:"Brief",verb:"Send brief to",next:"Order products"},
+    "Follow up":{kind:"Follow up",verb:"Follow up with",next:"Waiting on brand"},
+    "Order products":{kind:"Order",verb:"Order products for",next:"Products ordered"}
+  };
+  const liveCollabs=collabs.filter(c=>!c.archived);
+  const derived=[];
+  liveCollabs.forEach(c=>{
+    if(c.stage==="Send invoice"){
+      derived.push({key:"inv-"+c.id,kind:"Invoice",title:"Send invoice to "+c.brand,meta:kr(dkk(c)),due:TODAY,collabId:c.id,
+        complete:()=>api.patch("collabs",c.id,{stage:"Invoice sent",finStatus:"Invoiced"},0)});
+      return;
+    }
+    const s=STAGE_TASKS[c.stage];
+    if(s)derived.push({key:"st-"+c.id,kind:s.kind,title:s.verb+" "+c.brand,meta:"",due:TODAY,collabId:c.id,
+      complete:()=>api.patch("collabs",c.id,{stage:s.next},0)});
+  });
+  deliverables.forEach(d=>{
+    const c=liveCollabs.find(x=>x.id===d.collabId);
+    if(!c||c.finStatus==="Potential")return;
+    const si=DSTATUS.indexOf(d.status);
+    const name=c.brand+" — "+d.name;
+    const meta=d.platform+" · "+d.type;
+    if(d.shootDate&&si<=DSTATUS.indexOf("Shooting"))derived.push({key:"f-"+d.id,kind:"Film",title:"Film "+name,meta,due:d.shootDate,collabId:c.id,
+      complete:()=>api.patch("deliverables",d.id,{status:"Editing"},0)});
+    if(d.editDeadline&&si<=DSTATUS.indexOf("Editing"))derived.push({key:"e-"+d.id,kind:"Edit",title:"Edit "+name,meta,due:d.editDeadline,collabId:c.id,
+      complete:()=>api.patch("deliverables",d.id,{status:"Approval"},0)});
+    if(d.publishDate&&d.status!=="Published")derived.push({key:"p-"+d.id,kind:"Publish",title:"Publish "+name,meta,due:d.publishDate,collabId:c.id,
+      complete:()=>api.patch("deliverables",d.id,{status:"Published"},0)});
+  });
+  st.contacts.forEach(ct=>{
+    if(!ct.followUpDate||ct.status==="Hard no"||ct.status==="Completed")return;
+    if(liveCollabs.some(c=>c.contactId===ct.id&&(c.stage==="Need to respond"||c.stage==="Follow up")))return;
+    derived.push({key:"c-"+ct.id,kind:"Follow up",title:"Follow up with "+ct.brand,meta:ct.person||"",due:ct.followUpDate,contactId:ct.id,
+      complete:()=>api.patch("contacts",ct.id,{followUpDate:"",lastContactDate:TODAY},0)});
+  });
+  // "inv-"/"cd-" rows are leftovers from the old auto-created tasks; the
+  // derived items above replace them, so keep them out of the list.
+  const manualTasks=tasks.filter(x=>!x.archived&&!/^(inv|cd)-/.test(x.id));
+  const todoItems={today:[],week:[],later:[]};
+  derived.forEach(x=>todoItems[bucketOf(x.due)].push({...x,manual:false,isDone:false}));
+  manualTasks.forEach(x=>{const due=taskDue(x);todoItems[bucketOf(due)].push({...x,key:x.id,manual:true,due,isDone:!!x.done})});
+  Object.values(todoItems).forEach(list=>list.sort((a,b)=>(a.isDone?1:0)-(b.isDone?1:0)||(a.due||"9999").localeCompare(b.due||"9999")||(a.title||"").localeCompare(b.title||"")));
+  const openCount=bk=>todoItems[bk].filter(x=>!x.isDone).length;
 
   return html`<div className="page">
     <div className="title-row">
@@ -779,38 +821,42 @@ function Dashboard(p){
     ${showToday&&html`<section className="todo">
       <div style=${{display:"flex",alignItems:"baseline",gap:12,marginBottom:14,flexWrap:"wrap"}}>
         <h2 style=${{fontSize:22,fontWeight:700,margin:0,letterSpacing:"-.035em"}}>To do</h2>
-        <span style=${{fontSize:14,color:"var(--muted)"}}>${openTasks}${openTasks===1?" thing needs":" things need"} your attention</span>
+        <span style=${{fontSize:14,color:"var(--muted)"}}>${openCount("today")} for today · ${openCount("week")} this week</span>
       </div>
       <div className="todo-grid">
-        ${TASK_GROUPS.map(group=>{const items=tasks.filter(x=>x.group===group&&!x.archived);return html`<div key=${group}>
-          <div style=${{fontSize:12,fontWeight:500,letterSpacing:".14em",textTransform:"uppercase",color:"var(--muted)",marginBottom:10}}>${group}</div>
-          ${items.map(x=>html`<div key=${x.id} className="task" draggable="true" style=${{cursor:"grab"}}
-              onDragStart=${p.startDrag("task",x.id)} onDragEnd=${p.endDrag} onDragOver=${e=>e.preventDefault()}
-              onDrop=${e=>{e.preventDefault();const d=p.drag.current;if(d&&d.kind==="task"&&d.id!==x.id){
-                const arr=items.slice();const from=arr.findIndex(t=>t.id===d.id);const to=arr.findIndex(t=>t.id===x.id);
-                if(from>-1&&to>-1){const[moved]=arr.splice(from,1);arr.splice(to,0,moved);arr.forEach((t,i)=>api.patch("tasks",t.id,{createdAt:i},0))}
-              }p.drag.current=null}}>
-            <button type="button" className=${"check"+(x.done?" done":"")} aria-label=${x.done?"Mark as not done":"Mark as done"} onClick=${()=>{
-              const nowDone=!x.done;
-              const autoArchive=nowDone&&x.id.startsWith("inv-");
-              api.patch("tasks",x.id,autoArchive?{done:nowDone,archived:true}:{done:nowDone},0);
-            }}></button>
+        ${BUCKETS.map(([bk,label])=>html`<div key=${bk} onDragOver=${e=>e.preventDefault()}
+            onDrop=${e=>{e.preventDefault();const d=p.drag.current;if(d&&d.kind==="task")api.patch("tasks",d.id,{group:bucketDate[bk]},0);p.drag.current=null}}>
+          <div style=${{display:"flex",alignItems:"baseline",gap:8,fontSize:12,fontWeight:500,letterSpacing:".14em",textTransform:"uppercase",color:"var(--muted)",marginBottom:10}}>
+            <span>${label}</span><span className="num" style=${{letterSpacing:0,color:"var(--faint)"}}>${openCount(bk)}</span>
+          </div>
+          ${todoItems[bk].map(x=>x.manual?html`<div key=${x.key} className="task" draggable="true" style=${{cursor:"grab"}} onDragStart=${p.startDrag("task",x.id)} onDragEnd=${p.endDrag}>
+            <button type="button" className=${"check"+(x.isDone?" done":"")} aria-label=${x.isDone?"Mark as not done":"Mark as done"} onClick=${()=>api.patch("tasks",x.id,{done:!x.isDone},0)}></button>
             <div style=${{flex:1,minWidth:0}}>
               <input id=${"task-t-"+x.id} className="quiet" aria-label="Task" value=${x.title} onChange=${val(v=>api.patch("tasks",x.id,{title:v}))}
-                style=${{display:"block",width:"100%",fontSize:15,fontWeight:500,letterSpacing:"-.018em",color:x.done?"var(--muted)":"var(--ink)",textDecoration:x.done?"line-through":"none"}}/>
-              <div style=${{display:"flex",alignItems:"baseline",gap:8}}>
-                <input id=${"task-m-"+x.id} className="quiet" aria-label="Details" placeholder="Add details" value=${x.meta} onChange=${val(v=>api.patch("tasks",x.id,{meta:v}))}
-                  style=${{flex:1,minWidth:0,fontSize:13,color:x.done?"var(--dash-2)":"var(--muted)",textDecoration:x.done?"line-through":"none"}}/>
-                ${x.collabId&&st.collabs.some(c=>c.id===x.collabId)&&html`<button type="button" onClick=${()=>setOpen(x.collabId)} style=${{flex:"none",background:"transparent",border:0,padding:0,fontSize:11.5,color:"var(--muted)",textDecoration:"underline",textUnderlineOffset:2}}>Open</button>`}
-                ${x.done&&!x.id.startsWith("inv-")&&html`<button type="button" onClick=${()=>api.patch("tasks",x.id,{archived:true},0)} style=${{flex:"none",background:"transparent",border:0,padding:0,fontSize:11.5,color:"var(--muted)",textDecoration:"underline",textUnderlineOffset:2}}>Archive</button>`}
+                style=${{display:"block",width:"100%",fontSize:15,fontWeight:500,letterSpacing:"-.018em",color:x.isDone?"var(--muted)":"var(--ink)",textDecoration:x.isDone?"line-through":"none"}}/>
+              <div style=${{display:"flex",alignItems:"baseline",gap:8,flexWrap:"wrap"}}>
+                <input id=${"task-m-"+x.id} className="quiet" aria-label="Details" placeholder="Add details" value=${x.meta||""} onChange=${val(v=>api.patch("tasks",x.id,{meta:v}))}
+                  style=${{flex:1,minWidth:90,fontSize:13,color:x.isDone?"var(--dash-2)":"var(--muted)",textDecoration:x.isDone?"line-through":"none"}}/>
+                <input type="date" aria-label="Due date" className="date-in num" value=${x.due} onChange=${val(v=>api.patch("tasks",x.id,{group:v},0))} style=${{width:112,flex:"none",fontSize:11.5,padding:"1px 4px"}}/>
+                ${x.collabId&&collabs.some(c=>c.id===x.collabId)&&html`<button type="button" onClick=${()=>setOpen(x.collabId)} style=${{flex:"none",background:"transparent",border:0,padding:0,fontSize:11.5,color:"var(--muted)",textDecoration:"underline",textUnderlineOffset:2}}>Open</button>`}
+                ${x.isDone&&html`<button type="button" onClick=${()=>api.patch("tasks",x.id,{archived:true},0)} style=${{flex:"none",background:"transparent",border:0,padding:0,fontSize:11.5,color:"var(--muted)",textDecoration:"underline",textUnderlineOffset:2}}>Archive</button>`}
               </div>
             </div>
             <button type="button" className="x" aria-label="Delete task" onClick=${()=>askDelete("Delete this task?","“"+x.title+"” will be removed from To do.",()=>api.remove([["tasks",x.id]]))}>✕</button>
+          </div>`:html`<div key=${x.key} className="task">
+            <button type="button" className="check" aria-label=${"Mark done: "+x.title} title="Mark done" onClick=${x.complete}></button>
+            <div style=${{flex:1,minWidth:0}}>
+              <div style=${{fontSize:15,fontWeight:500,letterSpacing:"-.018em"}}>${x.title}</div>
+              <div style=${{display:"flex",alignItems:"baseline",gap:8}}>
+                <span style=${{flex:1,minWidth:0,fontSize:13,color:"var(--muted)"}}><span className="kicker" style=${{marginRight:6}}>${x.kind}</span>${[dueLabel(x.due),x.meta].filter(Boolean).join(" · ")}</span>
+                <button type="button" onClick=${()=>x.contactId?p.setOpenContact(x.contactId):setOpen(x.collabId)} style=${{flex:"none",background:"transparent",border:0,padding:0,fontSize:11.5,color:"var(--muted)",textDecoration:"underline",textUnderlineOffset:2}}>Open</button>
+              </div>
+            </div>
           </div>`)}
-          ${items.length===0&&html`<span style=${{fontSize:13,color:"var(--faint)"}}>Nothing here</span>`}
-          <button type="button" className="add-row" onClick=${()=>api.add("tasks",{id:uid("t"),group,title:"New task",meta:"",done:false,collabId:""})}>
+          ${todoItems[bk].length===0&&html`<span style=${{fontSize:13,color:"var(--faint)"}}>Nothing here</span>`}
+          <button type="button" className="add-row" onClick=${()=>api.add("tasks",{id:uid("t"),group:bucketDate[bk],title:"New task",meta:"",done:false,collabId:""})}>
             <span className="add-dot">+</span><span>Add task</span></button>
-        </div>`})}
+        </div>`)}
       </div>
     </section>`}
 
@@ -896,7 +942,7 @@ function DealsBoard(p){
     const item=deliverables.find(x=>x.id===d.id);
     const daysInMonth=new Date(y,m+1,0).getDate();
     const day=item&&item.publishDate?Math.min(parse(item.publishDate).getDate(),daysInMonth):1;
-    api.patch("deliverables",d.id,{publishDate:isoOf(new Date(y,m,day)),status:item&&item.status==="Published"?"Published":"Scheduled"},0);
+    api.patch("deliverables",d.id,{publishDate:isoOf(new Date(y,m,day)),status:!item||item.status==="Idea"?"Scheduled":item.status},0);
     drag.current=null;
   };
 
@@ -963,7 +1009,7 @@ function Calendar(p){
 
   const dropOnDate=iso=>e=>{
     e.preventDefault();const d=drag.current;setDropTarget(null);if(!d)return;
-    if(d.kind==="deliverable"){const x=deliverables.find(o=>o.id===d.id);api.patch("deliverables",d.id,{publishDate:iso,status:x&&x.status==="Published"?"Published":"Scheduled"},0)}
+    if(d.kind==="deliverable"){const x=deliverables.find(o=>o.id===d.id);api.patch("deliverables",d.id,{publishDate:iso,status:!x||x.status==="Idea"?"Scheduled":x.status},0)}
     if(d.kind==="idea")api.patch("ideas",d.id,{scheduledDate:iso},0);
     drag.current=null;
   };
@@ -1160,7 +1206,7 @@ function Archive(p){
       <div style=${{display:"flex",flexDirection:"column",gap:8}}>
         ${tasks.map(x=>html`<div key=${x.id} className="card" style=${{padding:"11px 15px",display:"flex",alignItems:"center",gap:12}}>
           <span style=${{flex:1,minWidth:0,fontSize:13.5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>${x.title}</span>
-          <span style=${{fontSize:11.5,color:"var(--muted)"}}>${x.group}</span>
+          <span style=${{fontSize:11.5,color:"var(--muted)"}}>${/^\d{4}-\d{2}-\d{2}$/.test(x.group||"")?fmtDate(x.group):x.group}</span>
           <button type="button" className="btn" style=${{padding:"4px 10px",fontSize:11.5}} onClick=${()=>api.patch("tasks",x.id,{archived:false},0)}>Unarchive</button>
           <button type="button" className="x" aria-label="Delete task" onClick=${()=>askDelete("Delete this task?","“"+x.title+"” will be permanently removed.",()=>api.remove([["tasks",x.id]]))}>✕</button>
         </div>`)}
@@ -1322,9 +1368,6 @@ function CollabPanel(p){
                 <select id=${"dp-"+d.id} aria-label="Platform" value=${d.platform} onChange=${val(v=>api.patch("deliverables",d.id,{platform:v},0))} style=${{border:0,borderRadius:8,background:"var(--surface)",padding:"4px 9px",fontSize:11.5}}><${Options} list=${PLATFORMS}/></select>
                 <select id=${"ds-"+d.id} aria-label="Status" value=${d.status} onChange=${val(v=>api.patch("deliverables",d.id,{status:v},0))}
                   style=${{border:0,borderRadius:8,padding:"4px 10px",fontSize:11.5,background:d.status==="Published"?"var(--surface)":"var(--ink)",color:d.status==="Published"?"var(--muted)":"var(--surface)"}}><${Options} list=${DSTATUS}/></select>
-                ${st.tasks.some(x=>x.id==="cd-"+d.id)
-                  ?html`<span style=${{fontSize:11,color:"var(--muted)"}} title="Already on the Content to-do list">✓ On to-do</span>`
-                  :html`<button type="button" className="x" style=${{width:"auto",padding:"0 8px",fontSize:11,color:"var(--ink-2)"}} aria-label=${"Add "+d.name+" to to-do"} title="Add to to-do" onClick=${()=>p.addContentTask(d)}>↑ To-do</button>`}
                 <button type="button" className="x" style=${{color:"var(--faint)"}} aria-label="Delete deliverable" onClick=${()=>askDelete("Delete this deliverable?","“"+d.name+"” will be removed from "+oc.brand+" and from the calendar.",()=>api.remove([["deliverables",d.id],["tasks","cd-"+d.id]]))}>✕</button>
               </div>
               <div style=${{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:10}}>
