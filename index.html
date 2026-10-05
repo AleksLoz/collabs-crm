@@ -222,6 +222,9 @@ const MONTHS=["January","February","March","April","May","June","July","August",
 const RING=2*Math.PI*33;
 const COLS=["contacts","collabs","deliverables","ideas","tasks"];
 const DEFAULT_SETTINGS={goal:45000,rates:{DKK:1,EUR:7.46,USD:6.4}};
+// Stored tasks created before this moment (5 Oct 2026) are hidden: the to-do
+// list was reset to a clean slate. New hand-written tasks are unaffected.
+const TASKS_SINCE=1791232608000;
 
 const pad=n=>String(n).padStart(2,"0");
 const isoOf=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
@@ -702,23 +705,15 @@ function Dashboard(p){
     const base=parse(iso).toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"});
     return iso<TODAY?"Overdue · "+base:base;
   };
-  const STAGE_TASKS={
-    "Need to respond":{kind:"Respond",verb:"Respond to",next:"Waiting on brand"},
-    "Send a brief":{kind:"Brief",verb:"Send brief to",next:"Order products"},
-    "Follow up":{kind:"Follow up",verb:"Follow up with",next:"Waiting on brand"},
-    "Order products":{kind:"Order",verb:"Order products for",next:"Products ordered"}
-  };
+  // Only three things are generated automatically: filming (shoot date),
+  // publishing (publish date) and sending the invoice (stage). Dated ones
+  // cover the current month only -- earlier months aren't surfaced as overdue.
+  const thisMonth=TODAY.slice(0,7);
   const liveCollabs=collabs.filter(c=>!c.archived);
   const derived=[];
   liveCollabs.forEach(c=>{
-    if(c.stage==="Send invoice"){
-      derived.push({key:"inv-"+c.id,kind:"Invoice",title:"Send invoice to "+c.brand,meta:kr(dkk(c)),due:TODAY,collabId:c.id,
-        complete:()=>api.patch("collabs",c.id,{stage:"Invoice sent",finStatus:"Invoiced"},0)});
-      return;
-    }
-    const s=STAGE_TASKS[c.stage];
-    if(s)derived.push({key:"st-"+c.id,kind:s.kind,title:s.verb+" "+c.brand,meta:"",due:TODAY,collabId:c.id,
-      complete:()=>api.patch("collabs",c.id,{stage:s.next},0)});
+    if(c.stage==="Send invoice")derived.push({key:"inv-"+c.id,kind:"Invoice",title:"Send invoice to "+c.brand,meta:kr(dkk(c)),due:TODAY,collabId:c.id,
+      complete:()=>api.patch("collabs",c.id,{stage:"Invoice sent",finStatus:"Invoiced"},0)});
   });
   deliverables.forEach(d=>{
     const c=liveCollabs.find(x=>x.id===d.collabId);
@@ -726,22 +721,15 @@ function Dashboard(p){
     const si=DSTATUS.indexOf(d.status);
     const name=c.brand+" — "+d.name;
     const meta=d.platform+" · "+d.type;
-    if(d.shootDate&&si<=DSTATUS.indexOf("Shooting"))derived.push({key:"f-"+d.id,kind:"Film",title:"Film "+name,meta,due:d.shootDate,collabId:c.id,
+    if(d.shootDate&&d.shootDate.slice(0,7)===thisMonth&&si<=DSTATUS.indexOf("Shooting"))derived.push({key:"f-"+d.id,kind:"Film",title:"Film "+name,meta,due:d.shootDate,collabId:c.id,
       complete:()=>api.patch("deliverables",d.id,{status:"Editing"},0)});
-    if(d.editDeadline&&si<=DSTATUS.indexOf("Editing"))derived.push({key:"e-"+d.id,kind:"Edit",title:"Edit "+name,meta,due:d.editDeadline,collabId:c.id,
-      complete:()=>api.patch("deliverables",d.id,{status:"Approval"},0)});
-    if(d.publishDate&&d.status!=="Published")derived.push({key:"p-"+d.id,kind:"Publish",title:"Publish "+name,meta,due:d.publishDate,collabId:c.id,
+    if(d.publishDate&&d.publishDate.slice(0,7)===thisMonth&&d.status!=="Published")derived.push({key:"p-"+d.id,kind:"Publish",title:"Publish "+name,meta,due:d.publishDate,collabId:c.id,
       complete:()=>api.patch("deliverables",d.id,{status:"Published"},0)});
   });
-  st.contacts.forEach(ct=>{
-    if(!ct.followUpDate||ct.status==="Hard no"||ct.status==="Completed")return;
-    if(liveCollabs.some(c=>c.contactId===ct.id&&(c.stage==="Need to respond"||c.stage==="Follow up")))return;
-    derived.push({key:"c-"+ct.id,kind:"Follow up",title:"Follow up with "+ct.brand,meta:ct.person||"",due:ct.followUpDate,contactId:ct.id,
-      complete:()=>api.patch("contacts",ct.id,{followUpDate:"",lastContactDate:TODAY},0)});
-  });
-  // "inv-"/"cd-" rows are leftovers from the old auto-created tasks; the
-  // derived items above replace them, so keep them out of the list.
-  const manualTasks=tasks.filter(x=>!x.archived&&!/^(inv|cd)-/.test(x.id));
+  // Hand-written tasks: only ones created since the clean slate (TASKS_SINCE);
+  // older stored rows, including the legacy auto-created "inv-"/"cd-" ones,
+  // stay out of view.
+  const manualTasks=tasks.filter(x=>!x.archived&&(x.createdAt||0)>=TASKS_SINCE&&!/^(inv|cd)-/.test(x.id));
   const todoItems={today:[],week:[],later:[]};
   derived.forEach(x=>todoItems[bucketOf(x.due)].push({...x,manual:false,isDone:false}));
   manualTasks.forEach(x=>{const due=taskDue(x);todoItems[bucketOf(due)].push({...x,key:x.id,manual:true,due,isDone:!!x.done})});
@@ -1183,7 +1171,7 @@ function Contacts(p){
 function Archive(p){
   const {st,api,dkk,setOpen,askDelete}=p;
   const collabs=st.collabs.filter(c=>c.archived).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-  const tasks=st.tasks.filter(x=>x.archived).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const tasks=st.tasks.filter(x=>x.archived&&(x.createdAt||0)>=TASKS_SINCE).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   return html`<div className="page" style=${{paddingTop:24}}>
     <h2 style=${{fontSize:24,fontWeight:700,margin:"0 0 18px",letterSpacing:"-.035em"}}>Archive</h2>
 
