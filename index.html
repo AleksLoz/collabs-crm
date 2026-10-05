@@ -709,11 +709,25 @@ function Dashboard(p){
   // publishing (publish date) and sending the invoice (stage). Dated ones
   // cover the current month only -- earlier months aren't surfaced as overdue.
   const thisMonth=TODAY.slice(0,7);
+  const MONTH_END=isoOf(new Date(parse(TODAY).getFullYear(),parse(TODAY).getMonth()+1,0));
+  // An automatic task has no row of its own, so removing or rescheduling one
+  // is remembered in a small shared "ov-<key>" row in the tasks table:
+  // done=true means removed, group=<date> means moved to that date.
+  const ovOf=key=>tasks.find(t=>t.id==="ov-"+key);
+  const setOverride=(key,fields)=>{
+    const id="ov-"+key;
+    if(ovOf(key))api.patch("tasks",id,fields,0);
+    else api.add("tasks",{id,group:"",title:"",meta:"",done:false,collabId:"",...fields});
+  };
   const liveCollabs=collabs.filter(c=>!c.archived);
   const derived=[];
   liveCollabs.forEach(c=>{
-    if(c.stage==="Send invoice")derived.push({key:"inv-"+c.id,kind:"Invoice",title:"Send invoice to "+c.brand,meta:kr(dkk(c)),due:TODAY,collabId:c.id,
-      complete:()=>api.patch("collabs",c.id,{stage:"Invoice sent",finStatus:"Invoiced"},0)});
+    if(c.stage==="Send invoice"){
+      const key="inv-"+c.id,ov=ovOf(key);
+      derived.push({key,kind:"Invoice",title:"Send invoice to "+c.brand,meta:kr(dkk(c)),due:(ov&&taskDue(ov))||TODAY,collabId:c.id,
+        complete:()=>api.patch("collabs",c.id,{stage:"Invoice sent",finStatus:"Invoiced"},0),
+        move:iso=>setOverride(key,{group:iso})});
+    }
   });
   deliverables.forEach(d=>{
     const c=liveCollabs.find(x=>x.id===d.collabId);
@@ -722,19 +736,37 @@ function Dashboard(p){
     const name=c.brand+" — "+d.name;
     const meta=d.platform+" · "+d.type;
     if(d.shootDate&&d.shootDate.slice(0,7)===thisMonth&&si<=DSTATUS.indexOf("Shooting"))derived.push({key:"f-"+d.id,kind:"Film",title:"Film "+name,meta,due:d.shootDate,collabId:c.id,
-      complete:()=>api.patch("deliverables",d.id,{status:"Editing"},0)});
+      complete:()=>api.patch("deliverables",d.id,{status:"Editing"},0),
+      move:iso=>api.patch("deliverables",d.id,{shootDate:iso},0)});
     if(d.publishDate&&d.publishDate.slice(0,7)===thisMonth&&d.status!=="Published")derived.push({key:"p-"+d.id,kind:"Publish",title:"Publish "+name,meta,due:d.publishDate,collabId:c.id,
-      complete:()=>api.patch("deliverables",d.id,{status:"Published"},0)});
+      complete:()=>api.patch("deliverables",d.id,{status:"Published"},0),
+      move:iso=>api.patch("deliverables",d.id,{publishDate:iso},0)});
   });
   // Hand-written tasks: only ones created since the clean slate (TASKS_SINCE);
-  // older stored rows, including the legacy auto-created "inv-"/"cd-" ones,
-  // stay out of view.
-  const manualTasks=tasks.filter(x=>!x.archived&&(x.createdAt||0)>=TASKS_SINCE&&!/^(inv|cd)-/.test(x.id));
+  // older stored rows, including the legacy auto-created "inv-"/"cd-" ones and
+  // the "ov-" override rows above, stay out of view.
+  const manualTasks=tasks.filter(x=>!x.archived&&(x.createdAt||0)>=TASKS_SINCE&&!/^(inv|cd|ov)-/.test(x.id));
   const todoItems={today:[],week:[],later:[]};
-  derived.forEach(x=>todoItems[bucketOf(x.due)].push({...x,manual:false,isDone:false}));
+  derived.filter(x=>{const o=ovOf(x.key);return !(o&&o.done)}).forEach(x=>todoItems[bucketOf(x.due)].push({...x,manual:false,isDone:false}));
   manualTasks.forEach(x=>{const due=taskDue(x);todoItems[bucketOf(due)].push({...x,key:x.id,manual:true,due,isDone:!!x.done})});
   Object.values(todoItems).forEach(list=>list.sort((a,b)=>(a.isDone?1:0)-(b.isDone?1:0)||(a.due||"9999").localeCompare(b.due||"9999")||(a.title||"").localeCompare(b.title||"")));
   const openCount=bk=>todoItems[bk].filter(x=>!x.isDone).length;
+  // Dropping a task on a column reschedules it: hand-written tasks get that
+  // column's date; Film/Publish move the reel's real shoot/publish date
+  // (kept inside this month so it doesn't vanish from the list); Send invoice
+  // is snoozed via its override row.
+  const dropOnBucket=bk=>e=>{
+    e.preventDefault();
+    const d=p.drag.current;
+    p.setDropTarget(null);
+    const item=d&&d.kind==="task"?[...todoItems.today,...todoItems.week,...todoItems.later].find(i=>i.key===d.id):null;
+    if(item){
+      const iso=bucketDate[bk];
+      if(item.manual)api.patch("tasks",item.id,{group:iso},0);
+      else item.move(iso>MONTH_END?MONTH_END:iso);
+    }
+    p.drag.current=null;
+  };
 
   return html`<div className="page">
     <div className="title-row">
@@ -812,12 +844,13 @@ function Dashboard(p){
         <span style=${{fontSize:14,color:"var(--muted)"}}>${openCount("today")} for today · ${openCount("week")} this week</span>
       </div>
       <div className="todo-grid">
-        ${BUCKETS.map(([bk,label])=>html`<div key=${bk} onDragOver=${e=>e.preventDefault()}
-            onDrop=${e=>{e.preventDefault();const d=p.drag.current;if(d&&d.kind==="task")api.patch("tasks",d.id,{group:bucketDate[bk]},0);p.drag.current=null}}>
+        ${BUCKETS.map(([bk,label])=>html`<div key=${bk} onDragOver=${p.allowDrop("todo:"+bk)} onDragLeave=${p.leaveDrop("todo:"+bk)} onDrop=${dropOnBucket(bk)}
+            style=${{minHeight:90,borderRadius:14,padding:"6px 8px 8px",margin:"-6px -8px -8px",background:p.dropTarget==="todo:"+bk?"var(--hot)":"transparent"}}>
           <div style=${{display:"flex",alignItems:"baseline",gap:8,fontSize:12,fontWeight:500,letterSpacing:".14em",textTransform:"uppercase",color:"var(--muted)",marginBottom:10}}>
             <span>${label}</span><span className="num" style=${{letterSpacing:0,color:"var(--faint)"}}>${openCount(bk)}</span>
           </div>
-          ${todoItems[bk].map(x=>x.manual?html`<div key=${x.key} className="task" draggable="true" style=${{cursor:"grab"}} onDragStart=${p.startDrag("task",x.id)} onDragEnd=${p.endDrag}>
+          ${todoItems[bk].map(x=>x.manual?html`<div key=${x.key} className="task" draggable="true" onDragStart=${p.startDrag("task",x.key)} onDragEnd=${p.endDrag}>
+            <span aria-hidden="true" title="Drag to move" style=${{flex:"none",paddingTop:3,color:"var(--dash-2)",cursor:"grab",fontSize:13,letterSpacing:"-2px",userSelect:"none"}}>⋮⋮</span>
             <button type="button" className=${"check"+(x.isDone?" done":"")} aria-label=${x.isDone?"Mark as not done":"Mark as done"} onClick=${()=>api.patch("tasks",x.id,{done:!x.isDone},0)}></button>
             <div style=${{flex:1,minWidth:0}}>
               <input id=${"task-t-"+x.id} className="quiet" aria-label="Task" value=${x.title} onChange=${val(v=>api.patch("tasks",x.id,{title:v}))}
@@ -831,15 +864,17 @@ function Dashboard(p){
               </div>
             </div>
             <button type="button" className="x" aria-label="Delete task" onClick=${()=>askDelete("Delete this task?","“"+x.title+"” will be removed from To do.",()=>api.remove([["tasks",x.id]]))}>✕</button>
-          </div>`:html`<div key=${x.key} className="task">
+          </div>`:html`<div key=${x.key} className="task" draggable="true" onDragStart=${p.startDrag("task",x.key)} onDragEnd=${p.endDrag}>
+            <span aria-hidden="true" title="Drag to reschedule" style=${{flex:"none",paddingTop:3,color:"var(--dash-2)",cursor:"grab",fontSize:13,letterSpacing:"-2px",userSelect:"none"}}>⋮⋮</span>
             <button type="button" className="check" aria-label=${"Mark done: "+x.title} title="Mark done" onClick=${x.complete}></button>
             <div style=${{flex:1,minWidth:0}}>
               <div style=${{fontSize:15,fontWeight:500,letterSpacing:"-.018em"}}>${x.title}</div>
               <div style=${{display:"flex",alignItems:"baseline",gap:8}}>
                 <span style=${{flex:1,minWidth:0,fontSize:13,color:"var(--muted)"}}><span className="kicker" style=${{marginRight:6}}>${x.kind}</span>${[dueLabel(x.due),x.meta].filter(Boolean).join(" · ")}</span>
-                <button type="button" onClick=${()=>x.contactId?p.setOpenContact(x.contactId):setOpen(x.collabId)} style=${{flex:"none",background:"transparent",border:0,padding:0,fontSize:11.5,color:"var(--muted)",textDecoration:"underline",textUnderlineOffset:2}}>Open</button>
+                <button type="button" onClick=${()=>setOpen(x.collabId)} style=${{flex:"none",background:"transparent",border:0,padding:0,fontSize:11.5,color:"var(--muted)",textDecoration:"underline",textUnderlineOffset:2}}>Open</button>
               </div>
             </div>
+            <button type="button" className="x" aria-label=${"Remove: "+x.title} title="Remove from to-do" onClick=${()=>askDelete("Remove this task?","“"+x.title+"” will be taken off everyone's To do. The "+(x.kind==="Invoice"?"collaboration":"reel")+" itself isn't changed.",()=>setOverride(x.key,{done:true}))}>✕</button>
           </div>`)}
           ${todoItems[bk].length===0&&html`<span style=${{fontSize:13,color:"var(--faint)"}}>Nothing here</span>`}
           <button type="button" className="add-row" onClick=${()=>api.add("tasks",{id:uid("t"),group:bucketDate[bk],title:"New task",meta:"",done:false,collabId:""})}>
