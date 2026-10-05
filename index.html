@@ -714,9 +714,9 @@ function Dashboard(p){
   // is remembered in a small shared "ov-<key>" row in the tasks table:
   // done=true means removed, group=<date> means moved to that date.
   const ovOf=key=>tasks.find(t=>t.id==="ov-"+key);
-  const setOverride=(key,fields)=>{
+  const setOverride=(key,fields,delay=0)=>{
     const id="ov-"+key;
-    if(ovOf(key))api.patch("tasks",id,fields,0);
+    if(ovOf(key))api.patch("tasks",id,fields,delay);
     else api.add("tasks",{id,group:"",title:"",meta:"",done:false,collabId:"",...fields});
   };
   const liveCollabs=collabs.filter(c=>!c.archived);
@@ -747,7 +747,14 @@ function Dashboard(p){
   // the "ov-" override rows above, stay out of view.
   const manualTasks=tasks.filter(x=>!x.archived&&(x.createdAt||0)>=TASKS_SINCE&&!/^(inv|cd|ov)-/.test(x.id));
   const todoItems={today:[],week:[],later:[]};
-  derived.filter(x=>{const o=ovOf(x.key);return !(o&&o.done)}).forEach(x=>todoItems[bucketOf(x.due)].push({...x,manual:false,isDone:false}));
+  // Edited wording lives in the same override row (title/meta); " " means
+  // "blanked on purpose", empty means "use the automatic text".
+  const ovText=(o,field,dflt)=>o&&o[field]?(o[field]===" "?"":o[field]):dflt;
+  derived.forEach(x=>{
+    const o=ovOf(x.key);
+    if(o&&o.done)return;
+    todoItems[bucketOf(x.due)].push({...x,title:ovText(o,"title",x.title),meta:ovText(o,"meta",x.meta),manual:false,isDone:false});
+  });
   manualTasks.forEach(x=>{const due=taskDue(x);todoItems[bucketOf(due)].push({...x,key:x.id,manual:true,due,isDone:!!x.done})});
   Object.values(todoItems).forEach(list=>list.sort((a,b)=>(a.isDone?1:0)-(b.isDone?1:0)||(a.due||"9999").localeCompare(b.due||"9999")||(a.title||"").localeCompare(b.title||"")));
   const openCount=bk=>todoItems[bk].filter(x=>!x.isDone).length;
@@ -868,9 +875,13 @@ function Dashboard(p){
             <span aria-hidden="true" title="Drag to reschedule" style=${{flex:"none",paddingTop:3,color:"var(--dash-2)",cursor:"grab",fontSize:13,letterSpacing:"-2px",userSelect:"none"}}>⋮⋮</span>
             <button type="button" className="check" aria-label=${"Mark done: "+x.title} title="Mark done" onClick=${x.complete}></button>
             <div style=${{flex:1,minWidth:0}}>
-              <div style=${{fontSize:15,fontWeight:500,letterSpacing:"-.018em"}}>${x.title}</div>
-              <div style=${{display:"flex",alignItems:"baseline",gap:8}}>
-                <span style=${{flex:1,minWidth:0,fontSize:13,color:"var(--muted)"}}><span className="kicker" style=${{marginRight:6}}>${x.kind}</span>${[dueLabel(x.due),x.meta].filter(Boolean).join(" · ")}</span>
+              <input id=${"task-t-"+x.key} className="quiet" aria-label="Task" title="Edit wording (only changes this to-do)" value=${x.title} onChange=${val(v=>setOverride(x.key,{title:v===""?" ":v},450))}
+                style=${{display:"block",width:"100%",fontSize:15,fontWeight:500,letterSpacing:"-.018em"}}/>
+              <div style=${{display:"flex",alignItems:"baseline",gap:6}}>
+                <span className="kicker" style=${{flex:"none"}}>${x.kind}</span>
+                ${dueLabel(x.due)&&html`<span style=${{flex:"none",fontSize:13,color:"var(--muted)"}}>${dueLabel(x.due)}</span>`}
+                <input id=${"task-m-"+x.key} className="quiet" aria-label="Details" placeholder="Add details" value=${x.meta||""} onChange=${val(v=>setOverride(x.key,{meta:v===""?" ":v},450))}
+                  style=${{flex:1,minWidth:60,fontSize:13,color:"var(--muted)"}}/>
                 <button type="button" onClick=${()=>setOpen(x.collabId)} style=${{flex:"none",background:"transparent",border:0,padding:0,fontSize:11.5,color:"var(--muted)",textDecoration:"underline",textUnderlineOffset:2}}>Open</button>
               </div>
             </div>
