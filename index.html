@@ -92,6 +92,8 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.03em;line-height:1.1;margin:0
 .col.hot{background:var(--hot)}
 .kcard{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:15px 16px;cursor:pointer}
 .kcard:hover{border-color:var(--ink)}
+.kcard.done{opacity:.5}
+.kcard.done:hover{opacity:1}
 .clamp{margin:8px 0 0;font-size:12.5px;color:var(--ink-2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .empty-drop{border:1px dashed var(--dash);border-radius:14px;padding:22px;text-align:center;font-size:12px;color:var(--faint)}
 .add-collab{border:1px dashed var(--dash);border-radius:14px;padding:11px;background:transparent;font-size:12.5px;color:var(--muted)}
@@ -261,6 +263,26 @@ function reelPrices(c,dels){
 }
 const allPriced=dels=>dels.length>0&&dels.every(hasOwnPrice);
 
+/* ---------- pipeline urgency ----------
+   Order inside a pipeline column (lower = nearer the top), the card colours for
+   the stages that need action, and the "waiting on a brand" follow-up clock. */
+const STAGE_RANK={"Send a brief":0,"Need to respond":1,"Follow up":2,"To do":2,"Waiting on brand":4};
+const stagePriority=c=>STAGE_RANK[c.stage]??3;
+const STAGE_TONE={
+  "Send a brief":{bar:"#e8590c",bg:"#fff4ec"},
+  "Need to respond":{bar:"#1c7ed6",bg:"#edf5fd"},
+  "Follow up":{bar:"#7048e8",bg:"#f4f0fe"}
+};
+const FOLLOW_UP_AFTER_DAYS=6;
+const daysBetween=(a,b)=>Math.round((parse(b)-parse(a))/86400000);
+// When a collab enters "Waiting on brand" the date is saved in a shared
+// "ov-ws-<id>" row (group = ISO date) so every login counts the same days.
+const stampWaiting=(api,tasks,collabId,iso)=>{
+  const id="ov-ws-"+collabId;
+  if(tasks.some(t=>t.id===id))api.patch("tasks",id,{group:iso},0);
+  else api.add("tasks",{id,group:iso,title:"",meta:"",done:false,collabId});
+};
+
 function useAuth(){
   const [state,setState]=useState({loading:SUPABASE_READY,session:null});
   useEffect(()=>{
@@ -344,10 +366,19 @@ function useStore(){
       update(s=>({...s,...ex,mode:"local"}));
       return;
     }
-    const channels=[];
-    (async()=>{
+    let channels=[];
+    let signedIn=false;
+    let runId=0;
+    const stopChannels=()=>{channels.forEach(c=>supabase.removeChannel(c));channels=[]};
+    // Loads everything and (re)subscribes to live changes. Runs again when the
+    // user signs in after the page opened: the first load then ran without a
+    // session, and row-level security returns nothing (not an error) for that.
+    const start=async()=>{
+      const run=++runId;
+      const {data:sess}=await supabase.auth.getSession();
+      signedIn=!!sess.session;
       const results=await Promise.all(COLS.map(col=>supabase.from(col).select("*")));
-      if(!alive)return;
+      if(!alive||run!==runId)return;
       const failed=results.find(r=>r.error);
       if(failed){update(s=>({...s,mode:"offline",error:failed.error.message}));return}
       update(s=>{
@@ -357,8 +388,9 @@ function useStore(){
         return n;
       });
       const {data:setRow}=await supabase.from("settings").select("*").eq("id","main").maybeSingle();
-      if(alive&&setRow)update(s=>({...s,settings:{...DEFAULT_SETTINGS,...setRow,rates:{...DEFAULT_SETTINGS.rates,...(setRow.rates||{})}}}));
-
+      if(alive&&run===runId&&setRow)update(s=>({...s,settings:{...DEFAULT_SETTINGS,...setRow,rates:{...DEFAULT_SETTINGS.rates,...(setRow.rates||{})}}}));
+      if(!alive||run!==runId)return;
+      stopChannels();
       COLS.forEach(col=>{
         const ch=supabase.channel(col+"-changes").on("postgres_changes",{event:"*",schema:"public",table:col},payload=>{
           update(s=>{
@@ -383,8 +415,10 @@ function useStore(){
         if(d)update(s=>({...s,settings:{...DEFAULT_SETTINGS,...d,rates:{...DEFAULT_SETTINGS.rates,...(d.rates||{})}}}));
       }).subscribe();
       channels.push(sch);
-    })();
-    return()=>{alive=false;channels.forEach(c=>supabase.removeChannel(c))};
+    };
+    start();
+    const {data:authSub}=supabase.auth.onAuthStateChange((_event,session)=>{if(alive&&session&&!signedIn)start()});
+    return()=>{alive=false;stopChannels();authSub.subscription.unsubscribe()};
   },[]);
 
   const flush=key=>{
@@ -489,6 +523,19 @@ function App(){
     return()=>{document.body.style.overflow=""};
   },[confirm,quick,login,open,openContact]);
 
+  // A brand we've been waiting on for FOLLOW_UP_AFTER_DAYS days becomes "Follow
+  // up". The clock is the shared "ov-ws-<id>" row; a collab we haven't timed yet
+  // gets its clock started today. Idempotent, so several open tabs can't clash.
+  useEffect(()=>{
+    st.collabs.forEach(c=>{
+      if(c.archived||c.stage!=="Waiting on brand")return;
+      const row=st.tasks.find(t=>t.id==="ov-ws-"+c.id);
+      const since=row&&/^\d{4}-\d{2}-\d{2}$/.test(row.group||"")?row.group:"";
+      if(!since)stampWaiting(api,st.tasks,c.id,TODAY);
+      else if(daysBetween(since,TODAY)>=FOLLOW_UP_AFTER_DAYS)api.patch("collabs",c.id,{stage:"Follow up"},0);
+    });
+  },[st.collabs,st.tasks]);
+
   if(SUPABASE_READY&&auth.loading)return html`<div className="gate"><span className="kicker">Loading…</span></div>`;
   if(SUPABASE_READY&&!auth.session)return html`<${LoginGate}/>`;
 
@@ -560,6 +607,7 @@ function App(){
   // to-do list picks it up from there (see derived tasks in Dashboard).
   const setStage=(c,stage)=>{
     api.patch("collabs",c.id,stage==="Send invoice"?{stage,kanban:"Completed"}:{stage},0);
+    if(stage==="Waiting on brand")stampWaiting(api,tasks,c.id,TODAY);
   };
   const setKanban=(c,kanban)=>{
     api.patch("collabs",c.id,{kanban},0);
@@ -840,7 +888,7 @@ function Dashboard(p){
       const key="td-"+c.id,ov=ovOf(key);
       const firstNote=(c.notes||c.pitch||"").split("\n")[0];
       derived.push({key,kind:"To do",title:c.brand,meta:firstNote,due:(ov&&taskDue(ov))||TODAY,collabId:c.id,
-        complete:()=>api.patch("collabs",c.id,{stage:"Waiting on brand"},0),
+        complete:()=>p.setStage(c,"Waiting on brand"),
         move:iso=>setOverride(key,{group:iso})});
     }
   });
@@ -1020,7 +1068,6 @@ function Dashboard(p){
       </div>
       ${boardView==="deals"?html`<${DealsBoard} ...${p}/>`:html`<section className="kanban">
       ${KAN.map(col=>{
-        const stagePriority=c=>c.stage==="To do"||c.stage==="Send a brief"||c.stage==="Need to respond"?0:c.stage==="Waiting on brand"?2:1;
         const list=collabs.filter(c=>!c.archived&&c.kanban===col).sort((a,b)=>stagePriority(a)-stagePriority(b));
         return html`<div key=${col} className=${"col"+(p.dropTarget==="col:"+col?" hot":"")} onDragOver=${p.allowDrop("col:"+col)} onDragLeave=${p.leaveDrop("col:"+col)}
           onDrop=${e=>{e.preventDefault();const d=p.drag.current;p.setDropTarget(null);if(d&&d.kind==="collab"){const cc=p.st.collabs.find(x=>x.id===d.id);if(cc)p.setKanban(cc,col)}p.drag.current=null}}>
@@ -1045,8 +1092,9 @@ function Dashboard(p){
    two views offer exactly the same stages (plus a one-click Archive). */
 function StageRow({c,id,setStage,api,style}){
   const urgent=URGENT.includes(c.stage);
+  const tone=STAGE_TONE[c.stage];
   return html`<div style=${{display:"flex",alignItems:"center",gap:7,...style}}>
-    <span style=${{width:6,height:6,borderRadius:"50%",flex:"none",background:urgent?"var(--ink)":"var(--dash-2)"}}></span>
+    <span style=${{width:6,height:6,borderRadius:"50%",flex:"none",background:tone?tone.bar:urgent?"var(--ink)":"var(--dash-2)"}}></span>
     <select id=${id} aria-label="Stage" className="qsel" value=${c.stage} onClick=${stop} onChange=${val(v=>setStage(c,v))}
       style=${{color:urgent?"var(--ink)":"var(--muted)",fontWeight:urgent?500:400}}><${Options} list=${STAGES}/></select>
     <button type="button" className="x" style=${{marginLeft:"auto",width:"auto",padding:"0 7px",fontSize:11,color:"var(--muted)"}} title="Archive this collaboration" aria-label=${"Archive "+c.brand}
@@ -1058,7 +1106,9 @@ function KanbanCard(p){
   const {c,st,api,dkk,setOpen,deleteCollab}=p;
   const dels=st.deliverables.filter(d=>d.collabId===c.id);
   const next=dels.filter(d=>d.publishDate).map(d=>d.publishDate).sort()[0];
-  return html`<article className="kcard" draggable="true" onDragStart=${p.startDrag("collab",c.id)} onDragEnd=${p.endDrag} onClick=${()=>setOpen(c.id)}>
+  const tone=STAGE_TONE[c.stage];
+  return html`<article className="kcard" draggable="true" onDragStart=${p.startDrag("collab",c.id)} onDragEnd=${p.endDrag} onClick=${()=>setOpen(c.id)}
+    style=${tone?{borderLeft:"4px solid "+tone.bar,background:tone.bg}:undefined}>
     <div style=${{display:"flex",alignItems:"baseline",gap:8}}>
       <span style=${{fontSize:15,fontWeight:600,letterSpacing:"-.022em",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>${c.brand}</span>
       <span style=${{fontSize:11,color:"var(--faint)"}}>${c.owner}</span>
@@ -1092,6 +1142,9 @@ function DealsBoard(p){
   // Current month sits in the middle (2 before, 2 after); arrows slide the window.
   {const td=parse(TODAY);for(let i=0;i<5;i++){const d=new Date(td.getFullYear(),td.getMonth()+cursor+i-2,1);dealMonths.push({y:d.getFullYear(),m:d.getMonth(),label:MONTHS[d.getMonth()]+" "+d.getFullYear(),current:d.getFullYear()===td.getFullYear()&&d.getMonth()===td.getMonth()})}}
   const perReel=d=>{const c=collabs.find(x=>x.id===d.collabId);return c?p.reelDkk(c,d):0};
+  // Finished work (published reel, or a collab in Completed) sinks to the
+  // bottom of its month and fades.
+  const isDone=d=>{const c=collabs.find(x=>x.id===d.collabId);return d.status==="Published"||!!(c&&c.kanban==="Completed")};
   const dropOnDealMonth=(y,m)=>e=>{
     e.preventDefault();const d=drag.current;setDropTarget(null);if(!d||d.kind!=="deliverable")return;
     const item=deliverables.find(x=>x.id===d.id);
@@ -1110,7 +1163,8 @@ function DealsBoard(p){
     <div className="grid-scroll">
     <div style=${{display:"grid",gridTemplateColumns:"repeat(5,minmax(220px,1fr))",gap:12,minWidth:1120}}>
       ${dealMonths.map(mo=>{
-        const items=deliverables.filter(d=>{if(!d.publishDate)return false;const c=collabs.find(x=>x.id===d.collabId);if(!c||c.archived)return false;const dd=parse(d.publishDate);return dd.getFullYear()===mo.y&&dd.getMonth()===mo.m});
+        const items=deliverables.filter(d=>{if(!d.publishDate)return false;const c=collabs.find(x=>x.id===d.collabId);if(!c||c.archived)return false;const dd=parse(d.publishDate);return dd.getFullYear()===mo.y&&dd.getMonth()===mo.m})
+          .sort((a,b)=>(isDone(a)?1:0)-(isDone(b)?1:0));
         const key="deal:"+mo.y+"-"+mo.m;
         return html`<div key=${mo.label} className=${"col"+(dropTarget===key?" hot":"")} onDragOver=${allowDrop(key)} onDragLeave=${leaveDrop(key)} onDrop=${dropOnDealMonth(mo.y,mo.m)}
             style=${mo.current?{boxShadow:"inset 0 0 0 1.5px var(--ink)",background:dropTarget===key?"var(--hot)":"var(--surface)"}:undefined}>
@@ -1126,7 +1180,7 @@ function DealsBoard(p){
               const c=collabs.find(x=>x.id===d.collabId);
               if(!c)return "";
               const sibs=deliverables.filter(x=>x.collabId===c.id).length||1;
-              return html`<article key=${d.id} className="kcard" draggable="true" onDragStart=${startDrag("deliverable",d.id)} onDragEnd=${endDrag} onClick=${()=>openCollab(c.id)}>
+              return html`<article key=${d.id} className=${"kcard"+(isDone(d)?" done":"")} draggable="true" onDragStart=${startDrag("deliverable",d.id)} onDragEnd=${endDrag} onClick=${()=>openCollab(c.id)}>
                 <div style=${{display:"flex",alignItems:"baseline",gap:8}}>
                   <span style=${{fontSize:14,fontWeight:600,letterSpacing:"-.02em",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>${c.brand}</span>
                   <span style=${{marginLeft:"auto",display:"flex",alignItems:"baseline",gap:3}}>
