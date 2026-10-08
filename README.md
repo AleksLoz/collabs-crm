@@ -56,11 +56,32 @@ This is a static file with no build step, so any static host works once
 or GitHub Pages (Settings -> Pages -> deploy from the `main` branch — note Pages
 requires the repo to be public, or GitHub Pro/Enterprise for a private one).
 
+## Shopify sales tile (one-time setup)
+
+The dashboard has a "Shopify sales this month" tile (total sales, with net sales
+and order count underneath). The store credential has to stay on the server, so
+the tile calls `api/shopify-sales.js`, a Vercel function that only answers
+signed-in Collabs users. Until the keys exist the tile shows "Not connected".
+
+1. In your Shopify admin, create an app for this store and give it permission
+   to **read reports** (`read_reports`), then install it on the store.
+2. Copy either its **Admin API access token**, or its **Client ID** and
+   **Client secret**.
+3. In Vercel -> your project -> Settings -> Environment Variables, add
+   `SHOPIFY_ACCESS_TOKEN`, or `SHOPIFY_CLIENT_ID` + `SHOPIFY_CLIENT_SECRET`
+   (Production). Never put these in the repo or in `config.js`.
+4. Redeploy. The tile should now show this month's sales.
+
+Optional variables: `SHOPIFY_SHOP` (defaults to `b15dcb-90.myshopify.com`) and
+`SHOPIFY_API_VERSION`. If the tile shows a Shopify error message instead, that
+message is Shopify's own (for example a missing permission).
+
 ## What's in this repo
 
 - `index.html` — the whole app (UI, state, and the Supabase data layer in `useStore()`).
 - `supabase/schema.sql` — table definitions + RLS policies, run once per project.
 - `config.example.js` — template for `config.js` (your Supabase URL + anon key).
+- `api/shopify-sales.js` — Vercel function behind the Shopify tile.
 
 ## History
 
