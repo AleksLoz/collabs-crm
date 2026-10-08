@@ -51,6 +51,7 @@ create table if not exists deliverables (
   "publishDate" text default '',
   notes text default '',
   link text default '',
+  price numeric,
   "createdAt" bigint default 0
 );
 

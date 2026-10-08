@@ -49,6 +49,22 @@ a small internal CRM, not a multi-tenant product, so there's no per-user
 permission tier. Because login never sends an email, there's no rate limit to
 worry about as more people start using it.
 
+## Upgrading an existing database
+
+`schema.sql` only creates tables that don't exist yet. When a newer version of
+the app adds a column, a database created earlier needs it added once. This is
+safe to run any number of times (Supabase -> SQL Editor):
+
+```sql
+alter table contacts add column if not exists notes text default '';
+alter table collabs add column if not exists archived boolean default false;
+alter table tasks add column if not exists archived boolean default false;
+alter table deliverables add column if not exists price numeric;
+```
+
+If a change doesn't stick (or doesn't show for a teammate), the red banner at
+the top of the app now says when a column is missing.
+
 ## Hosting
 
 This is a static file with no build step, so any static host works once
