@@ -760,7 +760,10 @@ function Dashboard(p){
     return total;
   };
   const periodCollabCount=pred=>collabs.filter(c=>pred(c)&&deliverables.some(d=>d.collabId===c.id&&d.publishDate&&inPeriod(d.publishDate))).length;
-  const secured=periodRevenue(c=>c.finStatus!=="Potential");
+  // The goal is a monthly target, so "secured" always tracks the current
+  // month -- independent of whichever period pill is selected above for the
+  // rest of the page (so switching to "All time" etc. doesn't inflate it).
+  const secured=monthRevenue(t.getFullYear(),t.getMonth(),["Booked","Invoiced","Paid"]);
   const pct=goal>0?Math.round(secured/goal*100):0;
   const stephCollabCount=periodCollabCount(c=>c.owner==="Steph");
   const stephCut=periodRevenue(c=>c.owner==="Steph")*STEPH_CUT;
@@ -828,13 +831,14 @@ function Dashboard(p){
     shopTile
   ];
 
-  // chart -- runs from August (the most recent one on or before today)
-  // through the current month, growing by one point each month that passes.
+  // chart -- always the fixed August-through-December window for the current
+  // booking year (the one whose August is most recent on or before today), so
+  // upcoming months show already-booked revenue ahead of time instead of only
+  // growing one point per month as the year passes.
   const months=[];
   {
     const startYear=t.getMonth()>=7?t.getFullYear():t.getFullYear()-1;
-    const span=(t.getFullYear()-startYear)*12+(t.getMonth()-7);
-    for(let i=span;i>=0;i--){const d=new Date(t.getFullYear(),t.getMonth()-i,1);months.push({y:d.getFullYear(),m:d.getMonth(),label:MONTHS[d.getMonth()].slice(0,3)})}
+    for(let m=7;m<=11;m++){const d=new Date(startYear,m,1);months.push({y:d.getFullYear(),m:d.getMonth(),label:MONTHS[d.getMonth()].slice(0,3)})}
   }
   const values=months.map(x=>monthRevenue(x.y,x.m,["Booked"]));
   const top=30,bottom=160,plot=bottom-top,vbH=186;
@@ -977,18 +981,18 @@ function Dashboard(p){
               <path d=${path} fill="none" stroke="var(--ink)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke"></path>
             </svg>
             <span style=${{position:"absolute",right:0,top:(goalTop/vbH*100).toFixed(2)+"%",transform:"translateY(-135%)",fontSize:10.5,color:"var(--muted)",whiteSpace:"nowrap"}}>Goal ${kr(goal)}</span>
-            ${months.map((x,i)=>{const cur=i===months.length-1;const size=cur?10:8;return html`<span key=${i} style=${{position:"absolute",left:(pts[i].x/720*100).toFixed(2)+"%",top:(pts[i].y/vbH*100).toFixed(2)+"%",width:0,height:0}}>
+            ${months.map((x,i)=>{const cur=x.y===t.getFullYear()&&x.m===t.getMonth();const size=cur?10:8;return html`<span key=${i} style=${{position:"absolute",left:(pts[i].x/720*100).toFixed(2)+"%",top:(pts[i].y/vbH*100).toFixed(2)+"%",width:0,height:0}}>
               <span style=${{position:"absolute",left:"50%",top:"50%",transform:"translate(-50%,-50%)",width:size,height:size,borderRadius:"50%",border:"2px solid var(--ink)",background:cur?"var(--ink)":"var(--surface)"}}></span>
               <span className="num" style=${{position:"absolute",left:"50%",top:-14,transform:"translate(-50%,-100%)",fontSize:11,fontWeight:cur?600:400,color:cur?"var(--ink)":"var(--muted)",whiteSpace:"nowrap"}}>${values[i]>0?krShort(values[i]):"0"}</span>
             </span>`})}
           </div>
           <div style=${{position:"relative",height:26}}>
-            ${months.map((x,i)=>{const cur=i===months.length-1;return html`<span key=${i} style=${{position:"absolute",left:(pts[i].x/720*100).toFixed(2)+"%",top:4,transform:"translateX(-50%)",fontSize:11.5,fontWeight:cur?600:400,color:cur?"var(--ink)":"var(--muted)",whiteSpace:"nowrap"}}>${x.label}</span>`})}
+            ${months.map((x,i)=>{const cur=x.y===t.getFullYear()&&x.m===t.getMonth();return html`<span key=${i} style=${{position:"absolute",left:(pts[i].x/720*100).toFixed(2)+"%",top:4,transform:"translateX(-50%)",fontSize:11.5,fontWeight:cur?600:400,color:cur?"var(--ink)":"var(--muted)",whiteSpace:"nowrap"}}>${x.label}</span>`})}
           </div>
         </div>
 
         <div className="card goal-card">
-          <div className="kicker" style=${{alignSelf:"stretch"}}>Booked vs goal</div>
+          <div className="kicker" style=${{alignSelf:"stretch"}}>Booked vs goal <span style=${{fontWeight:400,textTransform:"none",letterSpacing:"normal"}}>· ${MONTHS[t.getMonth()]}</span></div>
           <div style=${{position:"relative",width:158,height:158,margin:"18px 0 14px"}}>
             <svg viewBox="0 0 80 80" width="158" height="158" style=${{display:"block",transform:"rotate(-90deg)"}} aria-hidden="true">
               <circle cx="40" cy="40" r="33" fill="none" stroke="var(--hot)" strokeWidth="7"></circle>
