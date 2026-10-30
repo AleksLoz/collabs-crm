@@ -51,7 +51,7 @@ worry about as more people start using it.
 
 ## Upgrading an existing database
 
-`schema.sql` only creates tables that don't exist yet. When a newer version of
+`schema.sql` creates any table that doesn't exist yet, and adds the Ta da timestamp columns if they're missing. When a newer version of
 the app adds a column, a database created earlier needs it added once. This is
 safe to run any number of times (Supabase -> SQL Editor):
 
@@ -60,7 +60,35 @@ alter table contacts add column if not exists notes text default '';
 alter table collabs add column if not exists archived boolean default false;
 alter table tasks add column if not exists archived boolean default false;
 alter table deliverables add column if not exists price numeric;
+alter table tasks add column if not exists "completedAt" bigint;
+alter table collabs add column if not exists "wonAt" bigint;
+alter table deliverables add column if not exists "publishedAt" bigint;
 ```
+
+`completedAt`, `wonAt` and `publishedAt` are epoch milliseconds, null until
+something is finished. The app sets them when a to-do is checked off, a collab
+is won (moved to Ongoing or Completed, or booked), or a deliverable is marked
+Published. Older rows are left null, so the Ta da column only fills up with
+work finished after the columns exist. Reversing that action clears the stamp.
+
+The whole To do is private to one signed-in Supabase user. By default that
+is `contact@byggeligt.com`. Other accounts do not see the To do switch, the
+columns, Ta da, task counts, or archived tasks, and the app does not load
+those rows for them. Pipeline, calendar, contacts, and the collaboration
+archive stay shared.
+
+The same `config.js` keys decide who that is. Set `TADA_OWNER_EMAIL` to move
+it to another email. Set `TADA_OWNER_ID` to that user's UUID instead if the
+email might change — when the id is set, it is the only check in the app.
+
+The database enforces the same split on `tasks`. The owner (that uuid, or
+`contact@byggeligt.com`) can read and write every task. Everyone else can
+only touch two shared rows the rest of the board needs: `ov-ws-*` (how long a
+brand has been "Waiting on brand") and `ov-shop-*` (a Shopify month typed in
+by hand). To point the database at a different owner, change the uuid and
+email in the `tasks owner` policy in `supabase/schema.sql` and run that
+policy block in the SQL editor. The app's `config.js` has to match, or the
+new owner would see an empty To do.
 
 If a change doesn't stick (or doesn't show for a teammate), the red banner at
 the top of the app now says when a column is missing.
