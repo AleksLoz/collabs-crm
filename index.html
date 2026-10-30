@@ -79,7 +79,8 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.03em;line-height:1.1;margin:0
 .goal-input:focus{border-color:var(--ink);outline:none}
 
 .todo{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:24px 28px 28px;margin-bottom:26px}
-.todo-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:22px;row-gap:22px}
+.todo-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:40px;row-gap:28px}
+.todo-grid.with-tada{grid-template-columns:repeat(4,minmax(0,1fr));gap:22px;row-gap:22px}
 .tada{background:#fff6e8;border:1px solid #ead9b8;border-radius:16px;padding:8px 12px 12px}
 .tada-head{display:flex;align-items:baseline;gap:8px;font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:#8a6232;margin-bottom:2px}
 .tada-mark{flex:none;width:24px;height:24px;margin-top:1px;border-radius:50%;background:var(--ink);color:#fff;display:grid;place-items:center;font-size:12px;line-height:1}
@@ -169,7 +170,7 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.03em;line-height:1.1;margin:0
   .chart-row{grid-template-columns:minmax(0,1fr)}
   .cal-wrap{flex-direction:column}
   .side{width:100% !important}
-  .todo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .todo-grid.with-tada{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media (max-width: 760px){
   .hdr{padding:12px 16px 0}
@@ -179,7 +180,7 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.03em;line-height:1.1;margin:0
   .page,.cal-wrap{padding:20px 16px 48px}
   .kanban{grid-template-columns:minmax(0,1fr)}
   .todo{padding:20px 18px}
-  .todo-grid{grid-template-columns:minmax(0,1fr)}
+  .todo-grid.with-tada{grid-template-columns:minmax(0,1fr)}
   .ctable{padding:4px 12px 12px}
   .panel-wrap{padding:0}
   .panel{border-radius:0}
@@ -210,6 +211,44 @@ const html = htm.bind(React.createElement);
    Security policies in supabase/schema.sql, not by hiding this key. */
 const CONFIG = window.COLLABS_CONFIG || {};
 const SUPABASE_READY = !!(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
+/* Ta da is one person's column. Set TADA_OWNER_ID in config.js to pin a
+   Supabase user UUID (that wins over the email). Otherwise the signed-in
+   email must match TADA_OWNER_EMAIL, which defaults to the contact account.
+   The name shown in the header is not a login and is never enough. */
+const TADA_OWNER_EMAIL = String(CONFIG.TADA_OWNER_EMAIL || "contact@byggeligt.com").trim().toLowerCase();
+const TADA_OWNER_ID = String(CONFIG.TADA_OWNER_ID || "").trim();
+function isTadaOwner(user){
+  if(!user) return false;
+  if(TADA_OWNER_ID) return user.id === TADA_OWNER_ID;
+  return String(user.email || "").trim().toLowerCase() === TADA_OWNER_EMAIL;
+}
+const TADA_STAMP = {tasks:"completedAt", collabs:"wonAt", deliverables:"publishedAt"};
+// Columns a non-owner is allowed to load. The stamp columns above are left
+// out on purpose. "archived" and deliverable "price" are included because the
+// app uses them; if an older database doesn't have one yet, the loader drops
+// that name and retries rather than requesting the stamp.
+const TABLE_COLUMNS = {
+  contacts:["id","brand","person","email","website","social","folder","lastContactDate","followUpDate","status","notes","createdAt"],
+  collabs:["id","contactId","brand","owner","price","currency","finStatus","stage","kanban","pitch","notes","folder","contract","startDate","endDate","invoice","archived","createdAt"],
+  deliverables:["id","collabId","name","platform","type","status","shootDate","editDeadline","publishDate","notes","link","price","createdAt"],
+  ideas:["id","title","hook","concept","platform","type","collabId","scheduledDate","createdAt"],
+  tasks:["id","group","title","meta","done","archived","collabId","createdAt"]
+};
+const quoteCol = c => '"' + String(c).replace(/"/g, '""') + '"';
+function stripStamp(col, row){
+  const k = TADA_STAMP[col];
+  if(!k || !row || !Object.prototype.hasOwnProperty.call(row, k)) return row;
+  const copy = {...row};
+  delete copy[k];
+  return copy;
+}
+function missingColumn(error){
+  const msg = (error && error.message) || "";
+  let m = /column [\w."]+\.(\w+) does not exist/i.exec(msg);
+  if(m) return m[1];
+  m = /Could not find the '([^']+)' column/i.exec(msg);
+  return m ? m[1] : "";
+}
 const supabase = SUPABASE_READY
   ? window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY)
   : null;
@@ -422,22 +461,44 @@ function useStore(){
     }
     let channels=[];
     let signedIn=false;
+    let signedInId="";
+    let seeTada=false;
     let runId=0;
     const stopChannels=()=>{channels.forEach(c=>supabase.removeChannel(c));channels=[]};
     // Loads everything and (re)subscribes to live changes. Runs again when the
     // user signs in after the page opened: the first load then ran without a
     // session, and row-level security returns nothing (not an error) for that.
+    // Non-owners never request the Ta da stamp columns. A missing optional
+    // column (an older database) is dropped and the query retried; the stamp
+    // name is never added back. Owners load every column, stamps included.
+    const loadRows=async(col,owner)=>{
+      const stamp=TADA_STAMP[col];
+      if(owner||!stamp) return supabase.from(col).select("*");
+      let cols=TABLE_COLUMNS[col].slice();
+      for(let i=0;i<8;i++){
+        const res=await supabase.from(col).select(cols.map(quoteCol).join(","));
+        if(!res.error){res.data=(res.data||[]).map(row=>stripStamp(col,row));return res}
+        const missing=missingColumn(res.error);
+        if(!missing||missing===stamp||!cols.includes(missing)) return res;
+        cols=cols.filter(c=>c!==missing);
+      }
+      return {data:null,error:{message:"Couldn't load "+col}};
+    };
     const start=async()=>{
       const run=++runId;
       const {data:sess}=await supabase.auth.getSession();
+      const user=sess.session&&sess.session.user;
       signedIn=!!sess.session;
-      const results=await Promise.all(COLS.map(col=>supabase.from(col).select("*")));
+      signedInId=user?user.id:"";
+      const owner=isTadaOwner(user);
+      seeTada=owner;
+      const results=await Promise.all(COLS.map(col=>loadRows(col,owner)));
       if(!alive||run!==runId)return;
       const failed=results.find(r=>r.error);
       if(failed){update(s=>({...s,mode:"offline",error:failed.error.message}));return}
       update(s=>{
         const n={...s};
-        COLS.forEach((col,i)=>{n[col]=(results[i].data||[]).slice().sort(byCreated)});
+        COLS.forEach((col,i)=>{n[col]=(results[i].data||[]).map(row=>owner?row:stripStamp(col,row)).slice().sort(byCreated)});
         n.mode="live";
         return n;
       });
@@ -452,7 +513,7 @@ function useStore(){
             if(payload.eventType==="DELETE"){
               list=list.filter(x=>x.id!==payload.old.id);
             }else{
-              const row=payload.new;
+              const row=seeTada?payload.new:stripStamp(col,payload.new);
               if(dirty.current.has(col+"/"+row.id))return s;
               const idx=list.findIndex(x=>x.id===row.id);
               if(idx>=0)list[idx]=row;else list.push(row);
@@ -471,7 +532,15 @@ function useStore(){
       channels.push(sch);
     };
     start();
-    const {data:authSub}=supabase.auth.onAuthStateChange((_event,session)=>{if(alive&&session&&!signedIn)start()});
+    // Reload when a different person signs in, so one login never keeps
+    // another login's Ta da rows in memory. The first sign-in still reloads
+    // a page that opened before there was a session.
+    const {data:authSub}=supabase.auth.onAuthStateChange((_event,session)=>{
+      if(!alive)return;
+      const id=session&&session.user&&session.user.id||"";
+      if(session&&id!==signedInId)start();
+      if(!session)signedInId="";
+    });
     return()=>{alive=false;stopChannels();authSub.subscription.unsubscribe()};
   },[]);
 
@@ -723,6 +792,7 @@ function App(){
     </header>
 
     ${tab==="dash"&&html`<${Dashboard} ...${common} period=${period} setPeriod=${setPeriod} showFinance=${showFinance} showToday=${showToday}
+        showTada=${isTadaOwner(auth.session&&auth.session.user)}
         boardView=${boardView} setBoardView=${setBoardView}
         goal=${goal} inPeriod=${inPeriod} monthRevenue=${monthRevenue} t=${t} prev=${prev} next=${next}/>`}
     ${tab==="cal"&&html`<${Calendar} ...${common} calMode=${calMode} setCalMode=${setCalMode} cursor=${cursor} setCursor=${setCursor}
@@ -780,7 +850,7 @@ function App(){
 
 /* ---------- Dashboard ---------- */
 function Dashboard(p){
-  const {st,api,dkk,collabDate,period,setPeriod,showFinance,showToday,boardView,setBoardView,goal,inPeriod,monthRevenue,t,prev,next,setOpen,askDelete}=p;
+  const {st,api,dkk,collabDate,period,setPeriod,showFinance,showToday,showTada,boardView,setBoardView,goal,inPeriod,monthRevenue,t,prev,next,setOpen,askDelete}=p;
   const {collabs,deliverables,tasks}=st;
   const shopify=useShopify();
   const [shopEdit,setShopEdit]=useState(false);
@@ -979,31 +1049,31 @@ function Dashboard(p){
   manualTasks.forEach(x=>{const due=taskDue(x);todoItems[bucketOf(due)].push({...x,key:x.id,manual:true,due,isDone:!!x.done})});
   Object.values(todoItems).forEach(list=>list.sort((a,b)=>(a.isDone?1:0)-(b.isDone?1:0)||(a.due||"9999").localeCompare(b.due||"9999")||(a.title||"").localeCompare(b.title||"")));
   const openCount=bk=>todoItems[bk].filter(x=>!x.isDone).length;
-  // Ta da: read-only log of this Copenhagen week (Monday–Sunday). It rebuilds
-  // from timestamps, so it empties itself when the week rolls over. Rows
-  // finished before the timestamp columns existed stay out — there is no
-  // honest time for them — except a reel already marked Published whose
-  // publish date falls in this week.
-  const week=copenhagenWeek(new Date());
+  // Ta da is built only for the owner. Other logins never reach this, and
+  // their data load omits the stamp columns entirely (see useStore).
   const tada=[];
-  tasks.forEach(x=>{
-    if(isSystemTask(x.id)||!inCphWeek(x.completedAt,week))return;
-    tada.push({key:"tada-t-"+x.id,kind:"Task",title:x.title||"Task",meta:x.meta||"",at:Number(x.completedAt),collabId:x.collabId||""});
-  });
-  collabs.forEach(c=>{
-    if(!inCphWeek(c.wonAt,week))return;
-    const where=c.kanban&&c.kanban!=="Potential"?c.kanban:c.finStatus;
-    tada.push({key:"tada-c-"+c.id,kind:"Won",title:c.brand||"Collaboration",meta:kr(dkk(c))+(where?" · "+where:""),at:Number(c.wonAt),collabId:c.id});
-  });
-  deliverables.forEach(d=>{
-    const stamped=inCphWeek(d.publishedAt,week);
-    const dated=!d.publishedAt&&d.status==="Published"&&d.publishDate>=week.monday&&d.publishDate<=week.sunday;
-    if(!stamped&&!dated)return;
-    const c=collabs.find(x=>x.id===d.collabId);
-    tada.push({key:"tada-d-"+d.id,kind:"Published",title:(c&&c.brand?c.brand+" — ":"")+(d.name||"Content"),meta:[d.platform,d.type].filter(Boolean).join(" · "),at:stamped?Number(d.publishedAt):cphToUtc(d.publishDate,"12:00:00"),collabId:d.collabId||""});
-  });
-  tada.sort((a,b)=>b.at-a.at||(a.title||"").localeCompare(b.title||""));
-  const weekSpan=fmtDate(week.monday)+" – "+fmtDate(week.sunday);
+  let weekSpan="";
+  if(showTada){
+    const week=copenhagenWeek(new Date());
+    weekSpan=fmtDate(week.monday)+" – "+fmtDate(week.sunday);
+    tasks.forEach(x=>{
+      if(isSystemTask(x.id)||!inCphWeek(x.completedAt,week))return;
+      tada.push({key:"tada-t-"+x.id,kind:"Task",title:x.title||"Task",meta:x.meta||"",at:Number(x.completedAt),collabId:x.collabId||""});
+    });
+    collabs.forEach(c=>{
+      if(!inCphWeek(c.wonAt,week))return;
+      const where=c.kanban&&c.kanban!=="Potential"?c.kanban:c.finStatus;
+      tada.push({key:"tada-c-"+c.id,kind:"Won",title:c.brand||"Collaboration",meta:kr(dkk(c))+(where?" · "+where:""),at:Number(c.wonAt),collabId:c.id});
+    });
+    deliverables.forEach(d=>{
+      const stamped=inCphWeek(d.publishedAt,week);
+      const dated=!d.publishedAt&&d.status==="Published"&&d.publishDate>=week.monday&&d.publishDate<=week.sunday;
+      if(!stamped&&!dated)return;
+      const c=collabs.find(x=>x.id===d.collabId);
+      tada.push({key:"tada-d-"+d.id,kind:"Published",title:(c&&c.brand?c.brand+" — ":"")+(d.name||"Content"),meta:[d.platform,d.type].filter(Boolean).join(" · "),at:stamped?Number(d.publishedAt):cphToUtc(d.publishDate,"12:00:00"),collabId:d.collabId||""});
+    });
+    tada.sort((a,b)=>b.at-a.at||(a.title||"").localeCompare(b.title||""));
+  }
   // Dropping a task on a column reschedules it: hand-written tasks get that
   // column's date; Film/Publish move the reel's real shoot/publish date
   // (kept inside this month so it doesn't vanish from the list); Send invoice
@@ -1095,9 +1165,9 @@ function Dashboard(p){
     ${showToday&&html`<section className="todo">
       <div style=${{display:"flex",alignItems:"baseline",gap:12,marginBottom:14,flexWrap:"wrap"}}>
         <h2 style=${{fontSize:22,fontWeight:700,margin:0,letterSpacing:"-.035em"}}>To do</h2>
-        <span style=${{fontSize:14,color:"var(--muted)"}}>${openCount("today")} for today · ${openCount("week")} this week · ${tada.length} celebrated</span>
+        <span style=${{fontSize:14,color:"var(--muted)"}}>${openCount("today")} for today · ${openCount("week")} this week${showTada?" · "+tada.length+" celebrated":""}</span>
       </div>
-      <div className="todo-grid">
+      <div className=${"todo-grid"+(showTada?" with-tada":"")}>
         ${BUCKETS.map(([bk,label])=>html`<div key=${bk} onDragOver=${p.allowDrop("todo:"+bk)} onDragLeave=${p.leaveDrop("todo:"+bk)} onDrop=${dropOnBucket(bk)}
             style=${{minHeight:90,borderRadius:14,padding:"6px 8px 8px",margin:"-6px -8px -8px",background:p.dropTarget==="todo:"+bk?"var(--hot)":"transparent"}}>
           <div style=${{display:"flex",alignItems:"baseline",gap:8,fontSize:12,fontWeight:500,letterSpacing:".14em",textTransform:"uppercase",color:"var(--muted)",marginBottom:10}}>
@@ -1138,7 +1208,7 @@ function Dashboard(p){
           <button type="button" className="add-row" onClick=${()=>api.add("tasks",{id:uid("t"),group:bucketDate[bk],title:"New task",meta:"",done:false,collabId:""})}>
             <span className="add-dot">+</span><span>Add task</span></button>
         </div>`)}
-        <div className="tada" aria-label="Ta da list, this week, read only">
+        ${showTada&&html`<div className="tada" aria-label="Ta da list, this week, read only">
           <div className="tada-head">
             <span aria-hidden="true" style=${{letterSpacing:0,textTransform:"none",fontSize:14}}>✨</span>
             <span>Ta da</span>
@@ -1157,7 +1227,7 @@ function Dashboard(p){
             </div>
           </div>`)}
           ${tada.length===0&&html`<span style=${{fontSize:13,color:"#b89a6a"}}>Nothing celebrated yet</span>`}
-        </div>
+        </div>`}
       </div>
     </section>`}
 
