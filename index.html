@@ -211,10 +211,11 @@ const html = htm.bind(React.createElement);
    Security policies in supabase/schema.sql, not by hiding this key. */
 const CONFIG = window.COLLABS_CONFIG || {};
 const SUPABASE_READY = !!(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
-/* Ta da is one person's column. Set TADA_OWNER_ID in config.js to pin a
-   Supabase user UUID (that wins over the email). Otherwise the signed-in
-   email must match TADA_OWNER_EMAIL, which defaults to the contact account.
-   The name shown in the header is not a login and is never enough. */
+/* The whole To do belongs to one login: the columns, Ta da, the To do
+   switch, archived tasks, and the task rows themselves. Set TADA_OWNER_ID
+   in config.js to pin a Supabase user UUID (that wins over the email).
+   Otherwise the signed-in email must match TADA_OWNER_EMAIL, which defaults
+   to the contact account. The name in the header is not a login. */
 const TADA_OWNER_EMAIL = String(CONFIG.TADA_OWNER_EMAIL || "contact@byggeligt.com").trim().toLowerCase();
 const TADA_OWNER_ID = String(CONFIG.TADA_OWNER_ID || "").trim();
 function isTadaOwner(user){
@@ -241,6 +242,12 @@ function stripStamp(col, row){
   const copy = {...row};
   delete copy[k];
   return copy;
+}
+// Rows in the tasks table that are not the to-do list. The follow-up clock
+// and a hand-typed Shopify month live here, and the rest of the CRM reads
+// them, so other logins still load these ids and nothing else.
+function isSharedTaskId(id){
+  return id.startsWith("ov-ws-") || id.startsWith("ov-shop-");
 }
 function missingColumn(error){
   const msg = (error && error.message) || "";
@@ -472,6 +479,15 @@ function useStore(){
     // column (an older database) is dropped and the query retried; the stamp
     // name is never added back. Owners load every column, stamps included.
     const loadRows=async(col,owner)=>{
+      // Everyone else loads only the shared clock/Shopify rows, never the
+      // to-do list. A failed request becomes an empty list so the rest of
+      // the board still opens. The database policy enforces the same split.
+      if(col==="tasks"&&!owner){
+        const res=await supabase.from("tasks").select("*").or("id.like.ov-ws-*,id.like.ov-shop-*");
+        if(res.error){console.warn("shared task load failed",res.error);return {data:[],error:null}}
+        res.data=(res.data||[]).filter(row=>isSharedTaskId(row.id||""));
+        return res;
+      }
       const stamp=TADA_STAMP[col];
       if(owner||!stamp) return supabase.from(col).select("*");
       let cols=TABLE_COLUMNS[col].slice();
@@ -498,7 +514,11 @@ function useStore(){
       if(failed){update(s=>({...s,mode:"offline",error:failed.error.message}));return}
       update(s=>{
         const n={...s};
-        COLS.forEach((col,i)=>{n[col]=(results[i].data||[]).map(row=>owner?row:stripStamp(col,row)).slice().sort(byCreated)});
+        COLS.forEach((col,i)=>{
+          let rows=(results[i].data||[]).map(row=>owner?row:stripStamp(col,row));
+          if(col==="tasks"&&!owner) rows=rows.filter(row=>isSharedTaskId(row.id||""));
+          n[col]=rows.slice().sort(byCreated);
+        });
         n.mode="live";
         return n;
       });
@@ -513,6 +533,10 @@ function useStore(){
             if(payload.eventType==="DELETE"){
               list=list.filter(x=>x.id!==payload.old.id);
             }else{
+              if(col==="tasks"&&!seeTada){
+                const tid=(payload.eventType==="DELETE"?(payload.old&&payload.old.id):(payload.new&&payload.new.id))||"";
+                if(!isSharedTaskId(tid))return s;
+              }
               const row=seeTada?payload.new:stripStamp(col,payload.new);
               if(dirty.current.has(col+"/"+row.id))return s;
               const idx=list.findIndex(x=>x.id===row.id);
@@ -624,6 +648,7 @@ function App(){
   const [login,setLogin]=useState(false);
   const auth=useAuth();
   const email=(SUPABASE_READY&&auth.session&&auth.session.user&&auth.session.user.email)||lsGet("collabs.email","contact@byggeligt.com");
+  const seeTasks=isTadaOwner(auth.session&&auth.session.user);
   const [calMode,setCalMode]=useState("Month");
   const [cursor,setCursor]=useState(TODAY);
   const [sidebar,setSidebar]=useState(true);
@@ -777,7 +802,7 @@ function App(){
         <div className="hdr-right">
           <div style=${{display:"flex",gap:4}}>
             <${Toggle} label="Finance" on=${showFinance} onClick=${()=>setShowFinance(!showFinance)}/>
-            <${Toggle} label="To do" on=${showToday} onClick=${()=>setShowToday(!showToday)}/>
+            ${seeTasks&&html`<${Toggle} label="To do" on=${showToday} onClick=${()=>setShowToday(!showToday)}/>`}
           </div>
           <span className="sync" aria-live="polite">${sync}</span>
           <span className="today-lbl num" style=${{fontSize:13,color:"var(--muted)"}}>${t.toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})}</span>
@@ -791,14 +816,14 @@ function App(){
         <span>${st.error}</span><button type="button" className="x" onClick=${api.clearError} aria-label="Dismiss">✕</button></div>`}
     </header>
 
-    ${tab==="dash"&&html`<${Dashboard} ...${common} period=${period} setPeriod=${setPeriod} showFinance=${showFinance} showToday=${showToday}
-        showTada=${isTadaOwner(auth.session&&auth.session.user)}
+    ${tab==="dash"&&html`<${Dashboard} ...${common} period=${period} setPeriod=${setPeriod} showFinance=${showFinance} showToday=${seeTasks&&showToday}
+        showTada=${seeTasks}
         boardView=${boardView} setBoardView=${setBoardView}
         goal=${goal} inPeriod=${inPeriod} monthRevenue=${monthRevenue} t=${t} prev=${prev} next=${next}/>`}
     ${tab==="cal"&&html`<${Calendar} ...${common} calMode=${calMode} setCalMode=${setCalMode} cursor=${cursor} setCursor=${setCursor}
         sidebar=${sidebar} setSidebar=${setSidebar} openQuick=${iso=>{setQuick(iso);setQuickTitle("")}}/>`}
     ${tab==="contacts"&&html`<${Contacts} ...${common} cFilter=${cFilter} setCFilter=${setCFilter} cSort=${cSort} setCSort=${setCSort}/>`}
-    ${tab==="archive"&&html`<${Archive} ...${common}/>`}
+    ${tab==="archive"&&html`<${Archive} ...${common} seeTasks=${seeTasks}/>`}
 
     ${open&&collabs.find(c=>c.id===open)&&html`<${CollabPanel} ...${common} collab=${collabs.find(c=>c.id===open)} onClose=${()=>setOpen(null)}/>`}
     ${openContact&&contacts.find(c=>c.id===openContact)&&html`<${ContactPanel} ...${common} contact=${contacts.find(c=>c.id===openContact)} onClose=${()=>setOpenContact(null)}/>`}
@@ -1564,9 +1589,9 @@ function Contacts(p){
 
 /* ---------- Archive ---------- */
 function Archive(p){
-  const {st,api,dkk,setOpen,askDelete}=p;
+  const {st,api,dkk,setOpen,askDelete,seeTasks}=p;
   const collabs=st.collabs.filter(c=>c.archived).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-  const tasks=st.tasks.filter(x=>x.archived&&(x.createdAt||0)>=TASKS_SINCE).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const tasks=seeTasks?st.tasks.filter(x=>x.archived&&(x.createdAt||0)>=TASKS_SINCE&&!isSharedTaskId(x.id||"")).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)):[];
   return html`<div className="page" style=${{paddingTop:24}}>
     <h2 style=${{fontSize:24,fontWeight:700,margin:"0 0 18px",letterSpacing:"-.035em"}}>Archive</h2>
 
@@ -1583,7 +1608,7 @@ function Archive(p){
       </div>
     </div>
 
-    <div>
+    ${seeTasks&&html`<div>
       <h3 style=${{fontSize:15,fontWeight:600,margin:"0 0 10px",letterSpacing:"-.018em"}}>Tasks</h3>
       ${tasks.length===0&&html`<p style=${{color:"var(--muted)",fontSize:13,margin:0}}>Nothing archived yet.</p>`}
       <div style=${{display:"flex",flexDirection:"column",gap:8}}>
@@ -1594,7 +1619,7 @@ function Archive(p){
           <button type="button" className="x" aria-label="Delete task" onClick=${()=>askDelete("Delete this task?","“"+x.title+"” will be permanently removed.",()=>api.remove([["tasks",x.id]]))}>✕</button>
         </div>`)}
       </div>
-    </div>
+    </div>`}
   </div>`;
 }
 

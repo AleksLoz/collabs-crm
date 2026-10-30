@@ -71,13 +71,24 @@ is won (moved to Ongoing or Completed, or booked), or a deliverable is marked
 Published. Older rows are left null, so the Ta da column only fills up with
 work finished after the columns exist. Reversing that action clears the stamp.
 
-Only one login can see that column: the signed-in Supabase user. By default
-that is `contact@byggeligt.com`. Other accounts still use the board, and their
-finished work is still stamped, but the app does not request the three stamp
-columns for them and does not render the column. To give the column to a
-different account, set `TADA_OWNER_EMAIL` in `config.js` (see
-`config.example.js`). Set `TADA_OWNER_ID` to that user's UUID instead if the
-email might change — when the id is set, it is the only check.
+The whole To do is private to one signed-in Supabase user. By default that
+is `contact@byggeligt.com`. Other accounts do not see the To do switch, the
+columns, Ta da, task counts, or archived tasks, and the app does not load
+those rows for them. Pipeline, calendar, contacts, and the collaboration
+archive stay shared.
+
+The same `config.js` keys decide who that is. Set `TADA_OWNER_EMAIL` to move
+it to another email. Set `TADA_OWNER_ID` to that user's UUID instead if the
+email might change — when the id is set, it is the only check in the app.
+
+The database enforces the same split on `tasks`. The owner (that uuid, or
+`contact@byggeligt.com`) can read and write every task. Everyone else can
+only touch two shared rows the rest of the board needs: `ov-ws-*` (how long a
+brand has been "Waiting on brand") and `ov-shop-*` (a Shopify month typed in
+by hand). To point the database at a different owner, change the uuid and
+email in the `tasks owner` policy in `supabase/schema.sql` and run that
+policy block in the SQL editor. The app's `config.js` has to match, or the
+new owner would see an empty To do.
 
 If a change doesn't stick (or doesn't show for a teammate), the red banner at
 the top of the app now says when a column is missing.
