@@ -36,7 +36,8 @@ create table if not exists collabs (
   "endDate" text default '',
   invoice text default '',
   archived boolean default false,
-  "createdAt" bigint default 0
+  "createdAt" bigint default 0,
+  "wonAt" bigint
 );
 
 create table if not exists deliverables (
@@ -52,7 +53,8 @@ create table if not exists deliverables (
   notes text default '',
   link text default '',
   price numeric,
-  "createdAt" bigint default 0
+  "createdAt" bigint default 0,
+  "publishedAt" bigint
 );
 
 create table if not exists ideas (
@@ -75,7 +77,8 @@ create table if not exists tasks (
   done boolean default false,
   archived boolean default false,
   "collabId" text default '',
-  "createdAt" bigint default 0
+  "createdAt" bigint default 0,
+  "completedAt" bigint
 );
 
 create table if not exists settings (
@@ -84,6 +87,14 @@ create table if not exists settings (
   rates jsonb default '{"DKK":1,"EUR":7.46,"USD":6.4}'::jsonb
 );
 insert into settings (id) values ('main') on conflict (id) do nothing;
+
+-- Weekly Ta da list. These are null until the app stamps them (epoch ms) the
+-- moment a task is checked off, a deal is won (moved to Ongoing/Completed, or
+-- booked), or a deliverable is marked Published. Existing rows stay null, so
+-- nothing finished before this column existed is rewritten. Safe to re-run.
+alter table tasks add column if not exists "completedAt" bigint;
+alter table collabs add column if not exists "wonAt" bigint;
+alter table deliverables add column if not exists "publishedAt" bigint;
 
 -- Row Level Security: any signed-in user (your team, via Supabase Auth) can
 -- read and write every table. There's no per-row ownership in this app --

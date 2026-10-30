@@ -51,7 +51,7 @@ worry about as more people start using it.
 
 ## Upgrading an existing database
 
-`schema.sql` only creates tables that don't exist yet. When a newer version of
+`schema.sql` creates any table that doesn't exist yet, and adds the Ta da timestamp columns if they're missing. When a newer version of
 the app adds a column, a database created earlier needs it added once. This is
 safe to run any number of times (Supabase -> SQL Editor):
 
@@ -60,7 +60,16 @@ alter table contacts add column if not exists notes text default '';
 alter table collabs add column if not exists archived boolean default false;
 alter table tasks add column if not exists archived boolean default false;
 alter table deliverables add column if not exists price numeric;
+alter table tasks add column if not exists "completedAt" bigint;
+alter table collabs add column if not exists "wonAt" bigint;
+alter table deliverables add column if not exists "publishedAt" bigint;
 ```
+
+`completedAt`, `wonAt` and `publishedAt` are epoch milliseconds, null until
+something is finished. The app sets them when a to-do is checked off, a collab
+is won (moved to Ongoing or Completed, or booked), or a deliverable is marked
+Published. Older rows are left null, so the Ta da column only fills up with
+work finished after the columns exist. Reversing that action clears the stamp.
 
 If a change doesn't stick (or doesn't show for a teammate), the red banner at
 the top of the app now says when a column is missing.
